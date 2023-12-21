@@ -23,7 +23,7 @@ def calculate_image_hash(image_path):
     return image_hash
 
 
-def find_duplicates(target_image_path, image_paths):
+def find_duplicates_hash(target_image_path, image_paths):
     target_hash = calculate_image_hash(target_image_path)
     duplicates = []
     for image_path in image_paths:
@@ -43,7 +43,6 @@ class ImSearch:
         self.image1_rgb = None
         self.height_target = None
         self.width_target = None
-        self.result_frame = None
         self.root = root
         self.root.title("ImSearch")
         self.root.geometry("1200x800")
@@ -54,13 +53,16 @@ class ImSearch:
         self.image_files = []
 
         # canvas
-        self.canvas_uploaded = tk.Canvas(root, bg="white")
-        self.canvas_uploaded.pack(side=tk.LEFT, padx=10, pady=200, fill=tk.BOTH, expand=True)
+        self.canvas_uploaded = tk.Canvas(root, bg="white", relief=tk.GROOVE, bd=4)
+        self.canvas_uploaded.pack(side=tk.LEFT, padx=10, pady=200, fill=tk.BOTH)
 
-        self.canvas_selected = tk.Canvas(root, bg="white")
-        self.canvas_selected.pack(side=tk.RIGHT, padx=10, pady=200, fill=tk.BOTH, expand=True)
+        self.canvas_selected = tk.Canvas(root, bg="white", relief=tk.GROOVE, bd=4)
+        self.canvas_selected.pack(side=tk.RIGHT, padx=10, pady=200, fill=tk.BOTH)
 
-        # window
+
+        result_frame = tk.Frame(root)
+        result_frame.pack(side=tk.TOP, padx=10, pady=10)
+
         control_frame = tk.Frame(root)
         control_frame.pack(side=tk.TOP, padx=10, pady=10)
 
@@ -69,31 +71,39 @@ class ImSearch:
         browse_button.pack()
 
         # select image button
-        select_target_button = ttk.Button(control_frame, text="Select Target Image", command=self.select_target_image)
+        select_target_button = ttk.Button(control_frame, text="Select Query Image", command=self.upload_query_image)
         select_target_button.pack()
 
         # selected image label
-        self.target_image_label = tk.Label(control_frame, text="Selected Target Image: None")
+        self.target_image_label = tk.Label(control_frame, text="Selected Query Image: None")
         self.target_image_label.pack()
 
         # search button
         search_button = ttk.Button(control_frame, text="Search For Duplicates", command=self.search_duplicates)
         search_button.pack()
 
-        self.duplicates_listbox = tk.Listbox(self.result_frame, selectmode=tk.SINGLE)
-        self.duplicates_listbox.pack(side=tk.BOTTOM, fill=tk.BOTH)
+        self.folders_listbox = tk.Listbox(control_frame, selectmode=tk.MULTIPLE)
+        self.folders_listbox.pack(side=tk.TOP, fill=tk.X)
 
-        view_properties_button = ttk.Button(control_frame, text="View Properties",
-                                            command=self.create_properties_window)
-        view_properties_button.pack()
+
+        self.duplicates_listbox = tk.Listbox(result_frame, selectmode=tk.SINGLE)
+        self.duplicates_listbox.pack(side=tk.BOTTOM, fill=tk.X)
+
+        #view_properties_button = ttk.Button(control_frame, text="View Properties",
+                                            #command=self.create_properties_window)
+        #view_properties_button.pack()
 
         delete_image_button = ttk.Button(control_frame, text="Delete Selected",
                                          command=self.delete_selected)
         delete_image_button.pack()
 
-        self.duplicates_listbox.bind("<<ListboxSelect>>", self.display_selected_image)
+        self.duplicates_listbox.bind("<<ListboxSelect>>", self.display_selected)
+        # self.canvas_selected.bind("<Configure>", self.on_window_resized)
+        # self.canvas_uploaded.bind("<Configure>", self.on_window_resized)
 
-    def select_target_image(self):
+    # def on_window_resized(event):
+    #     event.display_selected_image()
+    def upload_query_image(self):
         # file_path = filedialog.askopenfilename(
         #     filetypes=[("Image files", "*.png *.jpg *.jpeg *.bmp *.ppm *.pgm")])
         # if file_path:
@@ -156,16 +166,16 @@ class ImSearch:
 
         return grayscale_image
 
-    def create_properties_window(self):
-        properties_window = tk.Toplevel(self.root)
-        properties_window.title("Image Properties")
-
-        properties_frame = tk.Frame(properties_window)
-        properties_frame.pack(padx=10, pady=10)
-
-        selected_file = self.duplicates_listbox.get(self.duplicates_listbox.curselection())
-        selected_file_label = tk.Label(properties_frame, text="Selected File: " + selected_file)
-        selected_file_label.pack()
+    # def create_properties_window(self):
+    #     properties_window = tk.Toplevel(self.root)
+    #     properties_window.title("Image Properties")
+    #
+    #     properties_frame = tk.Frame(properties_window)
+    #     properties_frame.pack(padx=10, pady=10)
+    #
+    #     selected_file = self.duplicates_listbox.get(self.duplicates_listbox.curselection())
+    #     selected_file_label = tk.Label(properties_frame, text="Selected File: " + selected_file)
+    #     selected_file_label.pack()
 
     def delete_selected(self):
         selected_index = self.duplicates_listbox.curselection()
@@ -199,17 +209,20 @@ class ImSearch:
         self.canvas_uploaded.image = show_image
         self.image1_rgb.getdata()
 
-    def display_selected(self, image):
+    def display_selected(self):
+        selected_index = self.duplicates_listbox.curselection()
+        if selected_index:
+            selected_file = self.duplicates_listbox.get(selected_index)
         # self.width_target, self.height_target = image
         # self.image1 = self.image1.resize((self.root.winfo_width(), self.root.winfo_height()))
-        img = ImageTk.PhotoImage(image)
+            img = ImageTk.PhotoImage(selected_file)
         # self.image_data1 = self.get_image_data(self.image1)
         # self.image1_rgb = self.image1.convert("RGB")
         # self.pixel_val_selected = self.image1.load()
-        self.canvas_selected.delete("all")
-        show_image = self.canvas_selected.create_image(0, 0, anchor=tk.NW, image=img)
-        self.canvas_selected.image = show_image
-        self.image1_rgb.getdata()
+            self.canvas_selected.delete("all")
+            show_image = self.canvas_selected.create_image(0, 0, anchor=tk.NW, image=img)
+            self.canvas_selected.image = show_image
+            self.image1_rgb.getdata()
 
 
         # image = Image.open(image_path)
@@ -219,10 +232,8 @@ class ImSearch:
         # image_label.image = photo
         # image_label.pack()
 
-    def display_selected_image(self):
-        selected_index = self.duplicates_listbox.curselection()
-        if selected_index:
-            self.display_selected(self.duplicates_listbox[selected_index])
+    #def display_selected_image(self):
+
             # img = Image.open(selected_image)
             # img = ImageTk.PhotoImage(img)
             # self.canvas_duplicate.image = img  # Keep a reference to the image to avoid garbage collection
@@ -238,7 +249,7 @@ class ImSearch:
 
         try:
             self.duplicates_listbox.delete(0, tk.END)
-            duplicates = find_duplicates(self.target_image_path, self.image_files)
+            duplicates = find_duplicates_hash(self.target_image_path, self.image_files)
 
             # result window
             #result_window = tk.Toplevel(self.root)
