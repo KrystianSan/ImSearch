@@ -16,10 +16,11 @@ def change(path):
 
 
 def calculate_image_hash(image_path):
-    # calculate hash
+
     with open(image_path, 'rb') as file:
         image_data = file.read()
         image_hash = hashlib.sha256(image_data).hexdigest()
+
     return image_hash
 
 
@@ -61,16 +62,16 @@ class ImSearch:
 
         # folder button
         add_folder = ttk.Button(root, text="Add Folder", command=self.add_folder)
-        add_folder.place(x=1152, y=100, height=60, width=140)
+        add_folder.place(x=1162, y=100, height=60, width=140)
 
         remove_folder = ttk.Button(root, text="Remove Folder", command=self.remove_folder)
-        remove_folder.place(x=1152, y=20, height=60, width=140)
+        remove_folder.place(x=1162, y=20, height=60, width=140)
 
         folder_up = ttk.Button(root, text="UP", command=self.remove_folder)
-        folder_up.place(x=, y=20)
+        folder_up.place(x=64, y=20, height=60, width=140)
 
         folder_down = ttk.Button(root, text="DOWN", command=self.remove_folder)
-        folder_down.place(x=, y=20)
+        folder_down.place(x=64, y=100, height=60, width=140)
 
 
         # select image button
