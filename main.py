@@ -5,17 +5,17 @@ import cv2
 from pathlib import Path
 import time
 from tkinter.ttk import *
-from tkinter import filedialog, messagebox, ttk
-
+from tkinter import filedialog, messagebox, ttk, simpledialog
+import threading
 import numpy as np
 from PIL import Image, ImageTk
+import csv
 
 
 def calculate_image_hash(image_path):
     with open(image_path, 'rb') as file:
         image_data = file.read()
         image_hash = hashlib.sha256(image_data).hexdigest()
-
     return image_hash
 
 
@@ -23,6 +23,8 @@ class ImSearch:
     def __init__(self, root):
         self.subfolders = tk.IntVar()
         self.time = tk.IntVar()
+        self.stop_search_flag = threading.Event()
+        self.search_thread = None
 
         self.root = root
         self.root.title("ImSearch")
@@ -42,12 +44,6 @@ class ImSearch:
 
         self.canvas_selected = tk.Canvas(root, bg="white", relief=tk.SUNKEN)
         self.canvas_selected.place(x=902, y=200, height=512, width=400)
-
-        # progress bar
-        # self.progress = Progressbar(root, orient=tk.HORIZONTAL, length=100, mode='determinate')
-
-        # search time
-        # tk.Label = tk.Label(root, self.textvariable=time)
 
         # folder button
         add_folder = ttk.Button(root, text="Add Folder", command=self.add_folder)
@@ -70,12 +66,16 @@ class ImSearch:
         self.target_image_label = tk.Label(root, text="Selected Target Image: None")
         self.target_image_label.place(x=64, y=720)
 
-        # search button
-        duplicate_button = ttk.Button(root, text="Search For Duplicates", command=self.search_duplicates)
-        duplicate_button.place(x=696, y=232, height=34, width=160)
+        self.search_combobox = ttk.Combobox(root, values=["Search For Duplicates", "Find Similar"], state="readonly")
+        self.search_combobox.place(x=496, y=192, height=34, width=160)
+        self.search_combobox.current(0)
 
-        similar_button = ttk.Button(self.root, text="Find Similar", command=self.search_similar)
-        similar_button.place(x=516, y=232, height=34, width=160)
+        self.search_button = ttk.Button(root, text="Start Search", command=self.perform_search)
+        self.search_button.place(x=710, y=192, height=34, width=160)
+
+        self.stop_button = ttk.Button(self.root, text="Stop", command=self.stop_search)
+        self.stop_button.place(x=710, y=236, height=34, width=160)
+        self.stop_button.config(state=tk.DISABLED)
 
         self.subfolder_button = ttk.Checkbutton(self.root, text="Search subfolders", variable=self.subfolders,
                                                 onvalue=1, offvalue=0)
@@ -84,18 +84,50 @@ class ImSearch:
         self.folders_listbox = tk.Listbox(root, selectmode=tk.SINGLE)
         self.folders_listbox.place(x=232, y=20, height=140, width=902)
 
-        self.duplicates_listbox = tk.Listbox(root, selectmode=tk.SINGLE)
-        self.duplicates_listbox.place(x=505, y=320, height=360, width=360)
+        # self.duplicates_listbox = tk.Listbox(root, selectmode=tk.SINGLE)
+        # self.duplicates_listbox.place(x=505, y=360, height=320, width=360)
 
-        delete_image_button = ttk.Button(root, text="Delete Selected",
-                                         command=self.delete_selected)
-        delete_image_button.place(x=750, y=688, height=40, width=44)
+        self.tree = ttk.Treeview(root, columns=("Name", "Similarity"), show="headings", selectmode="browse")
+        self.tree.heading("Name", text="Name")
+        self.tree.heading("Similarity", text="Similarity (%)")
+        self.tree.column("Name", width=250)
+        self.tree.column("Similarity", width=110)
+        self.tree.place(x=500, y=320, height=360, width=360)
+        self.tree.bind("<<TreeviewSelect>>", self.display_selected)
+
+        # self.duplicates_listbox.bind("<<ListboxSelect>>", self.display_selected)
+        self.tree.bind("<<TreeviewSelect>>", self.display_selected)
 
         self.rng = tk.Spinbox(self.root, from_=0, to=100)
+        self.rng.delete(0, "end")
+        self.rng.insert(0, "50")
         self.rng.place(x=576, y=272, height=20, width=32)
         tk.Label(self.root, text="%", fg="gray").place(x=608, y=272, height=20, width=10)
 
-        self.duplicates_listbox.bind("<<ListboxSelect>>", self.display_selected)
+        # Status Bar with Progress Bar
+        self.status = tk.StringVar()
+        self.status.set("Ready")
+        self.status_bar = ttk.Label(self.root, textvariable=self.status, relief=tk.SUNKEN, anchor='w')
+        self.status_bar.place(x=0, y=740, height=28, width=1366)
+
+        self.progress = ttk.Progressbar(self.root, orient="horizontal", length=100, mode="determinate")
+        self.progress.place(x=1216, y=742, height=26, width=150)
+
+        # Save and Load Buttons
+        save_button = ttk.Button(root, text="Save Results", command=self.save_results)
+        save_button.place(x=1062, y=688, height=40, width=100)
+
+        load_button = ttk.Button(root, text="Load Results", command=self.load_results)
+        load_button.place(x=1162, y=688, height=40, width=100)
+
+        open_images_button = ttk.Button(self.root, text="Open Images", command=self.open_images)
+        open_images_button.place(x=962, y=688, height=40, width=100)
+
+        open_in_explorer_button = ttk.Button(root, text="Open in Explorer", command=self.open_in_explorer)
+        open_in_explorer_button.place(x=540, y=688, height=34, width=120)
+
+        delete_image_button = ttk.Button(root, text="Delete Selected", command=self.delete_selected)
+        delete_image_button.place(x=700, y=688, height=34, width=120)
 
     def upload_query_image(self):
         file_path = filedialog.askopenfilename(
@@ -103,7 +135,6 @@ class ImSearch:
         if file_path:
             self.target_image_path = file_path
             self.target_image_label.config(text=f"Selected Target Image: {os.path.basename(file_path)}")
-            print(self.target_image_path)
             self.target_image = Image.open(file_path, 'r')
             self.display_uploaded(self.target_image)
         else:
@@ -127,59 +158,78 @@ class ImSearch:
 
     def remove_folder(self):
         selected_folder = self.folders_listbox.curselection()
-        self.folders_listbox.delete(selected_folder[0])
+        if selected_folder:
+            self.folders_listbox.delete(selected_folder[0])
 
     def move_up(self):
         selected_index = self.folders_listbox.curselection()
-        if selected_index == 0:
-            return
-        text = self.folders_listbox.get(selected_index)
-        self.folders_listbox.delete(selected_index)
-        self.folders_listbox.insert(selected_index[0] - 1, text)
+        if selected_index and selected_index[0] > 0:
+            text = self.folders_listbox.get(selected_index)
+            self.folders_listbox.delete(selected_index)
+            self.folders_listbox.insert(selected_index[0] - 1, text)
+            self.folders_listbox.selection_set(selected_index[0] - 1)
 
     def move_down(self):
         selected_index = self.folders_listbox.curselection()
-
-        if selected_index and selected_index[0] < self.duplicates_listbox.size() - 1:
-            selected_item = self.duplicates_listbox.get(selected_index)
-
+        if selected_index and selected_index[0] < self.folders_listbox.size() - 1:
+            text = self.folders_listbox.get(selected_index)
             self.folders_listbox.delete(selected_index)
-
-            self.folders_listbox.insert(selected_index[0] + 1, selected_item)
-
+            self.folders_listbox.insert(selected_index[0] + 1, text)
             self.folders_listbox.selection_set(selected_index[0] + 1)
 
-    def search_subdir(self, target_image_path, folder_path):
-        target_hash = calculate_image_hash(target_image_path)
-        duplicates = []
-        for self.root, _, files in os.walk(folder_path):
-            for file in files:
-                if file == target_image_path:
-                    break
-                print(file)
-                print(target_image_path)
-                file_path = os.path.join(self.root, file)
-                current_hash = calculate_image_hash(file_path)
+    # def search_subdir(self, target_image_path, folder_path):
+    #     target_hash = calculate_image_hash(target_image_path)
+    #     duplicates = []
+    #     for self.root, _, files in os.walk(folder_path):
+    #         for file in files:
+    #             if file == target_image_path:
+    #                 break
+    #             file_path = os.path.join(self.root, file)
+    #             current_hash = calculate_image_hash(file_path)
+    #             if current_hash == target_hash:
+    #                 duplicates.append(file)
+    #     return duplicates
 
-                if current_hash == target_hash:
-                    duplicates.append(file)
+    def stop_search(self):
+        self.stop_search_flag.set()
 
-        return duplicates
+    def perform_search(self):
+        if not self.target_image_path or not self.folder_path:
+            tk.messagebox.showwarning("Warning", "Please set both file and folder.")
+        else:
+            self.stop_button.config(state=tk.NORMAL)
+            self.tree.delete(*self.tree.get_children())
+            include_subfolders = self.subfolders.get() == 1
+            files = self.list_files(Path(self.folder_path), include_subfolders)
+            total_files = len(files)
+            self.progress["maximum"] = total_files
+            search_type = self.search_combobox.get()
+            self.stop_search_flag.clear()
+            if search_type == "Search For Duplicates":
+                self.search_duplicates()
+            elif search_type == "Find Similar":
+                self.search_similar()
+            #self.stop_button.config(state=tk.DISABLED) #executes before the if statement
+
+    def reset_ui(self):
+        #self.status.set("Ready")
+        self.progress["value"] = 0
+        self.stop_search_flag.clear()
 
     def delete_selected(self):
-        selected_index = self.duplicates_listbox.curselection()
-        if not selected_index:
+        selected_item = self.tree.selection()
+        if not selected_item:
             messagebox.showinfo("Info", "No image selected")
             return
 
-        selected_file = self.duplicates_listbox.get(selected_index)
+        selected_file = self.tree.item(selected_item)['values'][0]
         confirmation = messagebox.askyesno("Confirm",
-                                           f"Do you want to delete {selected_file}? The file will be deleted from disk")
+                                           f"Do you really want to delete {selected_file}? The file will be deleted from disk")
 
         if confirmation:
             try:
                 os.remove(selected_file)
-                self.duplicates_listbox.delete(selected_index)
+                self.tree.delete(selected_item)
                 messagebox.showinfo("Info", f"Image {selected_file} has been deleted.")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to delete image: {str(e)}")
@@ -187,27 +237,21 @@ class ImSearch:
     def display_uploaded(self, image):
         width_factor = self.canvas_uploaded.winfo_width() / image.width
         height_factor = self.canvas_uploaded.winfo_height() / image.height
-
         scale_factor = min(width_factor, height_factor)
-
-        resized_image = image.resize((int(image.width * scale_factor),
-                                      int(image.height * scale_factor)))
-
+        resized_image = image.resize((int(image.width * scale_factor), int(image.height * scale_factor)))
         img = ImageTk.PhotoImage(resized_image)
-
         x_position = (self.canvas_uploaded.winfo_width() - resized_image.width) // 2
         y_position = (self.canvas_uploaded.winfo_height() - resized_image.height) // 2
-
         self.canvas_uploaded.delete("all")
         self.canvas_uploaded.create_image(x_position, y_position, anchor=tk.NW, image=img)
         self.canvas_uploaded.image = img
 
     def display_selected(self, event):
-        selected_index = self.duplicates_listbox.curselection()
-        if selected_index:
-            selected_file_path = self.duplicates_listbox.get(selected_index)
-            pos = selected_file_path.find(" Similarity:")
-            if pos > -1: selected_file_path = selected_file_path[:pos]
+        selected_item = self.tree.selection()
+        if selected_item:
+            selected_file_path = self.tree.item(selected_item)['values'][0]
+            selected_file_path = selected_file_path.split(" Similarity:")[0]  # Handle paths with spaces
+            selected_file_path = selected_file_path.strip("\"")  # Remove surrounding quotes
             selected_file = Image.open(selected_file_path, 'r')
             width_factor = self.canvas_selected.winfo_width() / selected_file.width
             height_factor = self.canvas_selected.winfo_height() / selected_file.height
@@ -221,7 +265,7 @@ class ImSearch:
             self.canvas_selected.create_image(x_position, y_position, anchor=tk.NW, image=img)
             self.canvas_selected.image = img
 
-    def listFiles(self, path=Path('.'), include_subfolders=False):
+    def list_files(self, path=Path('.'), include_subfolders=False):
         files = []
         ext = [".png", ".jpg", ".jpeg", ".bmp", ".ppm", ".pgm"]
         path = Path(path)
@@ -230,7 +274,7 @@ class ImSearch:
                 if entry.is_file() and entry.suffix.lower() in ext:
                     files.append(entry)
                 elif entry.is_dir() and include_subfolders:
-                    files.extend(self.listFiles(entry, include_subfolders))
+                    files.extend(self.list_files(entry, include_subfolders))
         except Exception as e:
             print(f"Error accessing {path}: {e}")
         return files
@@ -239,13 +283,43 @@ class ImSearch:
         if not self.target_image_path or not self.folder_path:
             tk.messagebox.showwarning("Warning", "Please set both file and folder.")
         else:
-            self.duplicates_listbox.delete(0, tk.END)
+            self.stop_search_flag.clear()
+            self.tree.delete(*self.tree.get_children())
             include_subfolders = self.subfolders.get() == 1
-            files = self.listFiles(Path(self.folder_path), include_subfolders)
+            files = self.list_files(Path(self.folder_path), include_subfolders)
             source_hash = calculate_image_hash(self.target_image_path)
-            for file in files:
-                if source_hash == calculate_image_hash(file) and self.target_image_path != file:
-                    self.duplicates_listbox.insert(tk.END, file)
+
+            self.progress["maximum"] = len(files)
+
+            self.search_thread = threading.Thread(target=self._search_duplicates_thread,
+                                                  args=(files, source_hash))
+            self.search_thread.start()
+
+    def _search_duplicates_thread(self, files, source_hash):
+        start_time = time.time()
+        analyzed_files_count = 0
+        for count, file in enumerate(files, start=1):
+            if self.stop_search_flag.is_set():
+                self.status.set(f"Search stopped by user. {analyzed_files_count} files analyzed")
+                break
+            self.status.set(f"Analyzing {file.name} ({count}/{len(files)})")
+            self.root.update_idletasks()
+            analyzed_files_count += 1
+            if source_hash == calculate_image_hash(file) and self.target_image_path != file:
+                self.tree.insert("", tk.END, values=(file, "Duplicate"))
+            self.progress["value"] = count
+            self.root.update_idletasks()
+        else:
+            self.status.set(f"Completed. {analyzed_files_count} files analyzed")
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        if not self.stop_search_flag.is_set():
+            self.status.set(f"Completed in {elapsed_time:.2f} seconds, {analyzed_files_count} files analyzed")
+            self.progress["value"] = 0
+
+        self.reset_ui()
+        self.stop_button.config(state=tk.DISABLED)
 
     def search_similar(self):
         if not self.folder_path:
@@ -256,7 +330,7 @@ class ImSearch:
             return
 
         try:
-            self.duplicates_listbox.delete(0, tk.END)
+            self.tree.delete(*self.tree.get_children())
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -268,31 +342,211 @@ class ImSearch:
             return
 
         include_subfolders = self.subfolders.get() == 1
-        files = self.listFiles(Path(self.folder_path), include_subfolders)
-        for file in files:
+        files = self.list_files(Path(self.folder_path), include_subfolders)
+
+        self.progress["maximum"] = len(files)
+
+        self.search_thread = threading.Thread(target=self._search_similar_thread,
+                                              args=(files, hist1))
+        self.search_thread.start()
+
+    def _search_similar_thread(self, files, hist1):
+        start_time = time.time()
+        analyzed_files_count = 0
+        for count, file in enumerate(files, start=1):
+            if self.stop_search_flag.is_set():
+                self.status.set(f"Search stopped by user. {analyzed_files_count} files analyzed")
+                break
+            self.status.set(f"Analyzing {file.name} ({count}/{len(files)})")
+            self.root.update_idletasks()
+            analyzed_files_count += 1
             if file != self.target_image_path:
-                print(file)
                 image_queued = cv2.imdecode(np.fromfile(file, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
                 hist2 = self.calculate_histogram(image_queued)
                 similarity = self.compare_histograms(hist1, hist2)
                 if similarity >= int(self.rng.get()):
-                    self.duplicates_listbox.insert(tk.END, f"{file} Similarity: {similarity:.2f}%")
+                    self.tree.insert("", tk.END, values=(file, f"{similarity:.2f}%"))
+            self.progress["value"] = count
+            self.root.update_idletasks()
+        else:
+            self.status.set(f"Completed. {analyzed_files_count} files analyzed")
 
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        if not self.stop_search_flag.is_set():
+            self.status.set(f"Completed in {elapsed_time:.2f} seconds, {analyzed_files_count} files analyzed")
+            self.progress["value"] = 0
+
+        self.reset_ui()
+        self.stop_button.config(state=tk.DISABLED)
 
     def calculate_histogram(self, image):
         hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
         h_hist = cv2.calcHist([hsv_image], [0], None, [256], [0, 256])
-
         return h_hist
 
     def compare_histograms(self, hist1, hist2):
-
         intersection = cv2.compareHist(hist1, hist2, cv2.HISTCMP_INTERSECT)
-
         similarity = (intersection / (hist1.sum() + hist2.sum() - intersection)) * 100
         return similarity
 
+    def save_results(self):
+        if not self.tree.get_children():
+            messagebox.showinfo("Info", "No search results to save.")
+            return
+
+        default_save_dir = "C:/ImSearchResults"
+
+        if not os.path.exists(default_save_dir):
+            os.makedirs(default_save_dir)
+
+        count = 0
+        for file in os.listdir(default_save_dir):
+            if file.startswith("result_") and file.endswith(".csv"):
+                count += 1
+
+        proposed_filename = f"result_{count + 1}.csv"
+
+        file_path = filedialog.asksaveasfilename(
+            initialdir=default_save_dir,
+            title="Save Results",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+            initialfile=proposed_filename
+        )
+
+        if not file_path:
+            return
+
+        similarity_threshold = self.rng.get()
+        search_subfolders = "Yes" if self.subfolders.get() == 1 else "No"
+
+        # save to file
+        with open(file_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["Target Image", self.target_image_path])
+            writer.writerow(["Similarity Threshold (%)", similarity_threshold])
+            writer.writerow(["Search Subfolders", search_subfolders])
+            writer.writerow([])
+            writer.writerow(["Name", "Similarity"])
+            for item in self.tree.get_children():
+                file_name, similarity = self.tree.item(item, "values")
+                writer.writerow([file_name, similarity])
+
+        messagebox.showinfo("Info", f"Results saved to {file_path}")
+
+    def load_results(self):
+        file_path = filedialog.askopenfilename(
+            title="Load Results",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+            initialdir="C:/ImSearchResults"
+        )
+
+        if not file_path:
+            return
+
+        with open(file_path, mode='r') as file:
+            reader = csv.reader(file)
+
+            self.tree.delete(*self.tree.get_children())
+
+            target_image_path = None
+            similarity_threshold = None
+            search_subfolders = None
+
+            for row in reader:
+                if not row:  # empty rows
+                    continue
+
+                if row[0] == "Target Image":
+                    target_image_path = row[1]
+                    continue
+                elif row[0] == "Similarity Threshold (%)":
+                    similarity_threshold = row[1]
+                    continue
+                elif row[0] == "Search Subfolders":
+                    search_subfolders = row[1]
+                    continue
+                elif row[0] == "Name" and row[1] == "Similarity":
+                    continue  # skip header
+
+                if len(row) == 2:
+                    file_name, similarity = row
+                    self.tree.insert("", tk.END, values=(file_name, similarity))
+
+            if target_image_path:
+                self.target_image_path = target_image_path
+                self.target_image = Image.open(target_image_path, 'r')
+                self.display_uploaded(self.target_image)
+
+            if similarity_threshold:
+                self.rng.delete(0, tk.END)
+                self.rng.insert(0, similarity_threshold)
+
+            if search_subfolders:
+                self.subfolders.set(1 if search_subfolders == "Yes" else 0)
+
+            messagebox.showinfo("Info", f"Results loaded from {file_path}")
+
+    def open_images(self):
+        selected_item = self.tree.selection()
+        if selected_item:
+            selected_file_path = self.tree.item(selected_item)['values'][0]
+            pos = selected_file_path.find(" Similarity:")
+            if pos > -1:
+                selected_file_path = selected_file_path[:pos]
+
+            target_image_full = Image.open(self.target_image_path, 'r')
+            selected_image_full = Image.open(selected_file_path, 'r')
+
+            target_width, target_height = target_image_full.size
+            selected_width, selected_height = selected_image_full.size
+
+            window_width = max(target_width, selected_width) * 2
+            window_height = max(target_height, selected_height)
+
+            new_window = tk.Toplevel(self.root)
+            new_window.title("Full Size Images")
+            new_window.geometry(f"{window_width}x{window_height}")
+
+            canvas_target = tk.Canvas(new_window, bg="white", relief=tk.SUNKEN, width=target_width,
+                                      height=target_height)
+            canvas_target.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            canvas_selected = tk.Canvas(new_window, bg="white", relief=tk.SUNKEN, width=selected_width,
+                                        height=selected_height)
+            canvas_selected.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+            target_image_full = ImageTk.PhotoImage(target_image_full)
+            canvas_target.create_image(0, 0, anchor=tk.NW, image=target_image_full)
+            canvas_target.image = target_image_full
+
+            selected_image_full = ImageTk.PhotoImage(selected_image_full)
+            canvas_selected.create_image(0, 0, anchor=tk.NW, image=selected_image_full)
+            canvas_selected.image = selected_image_full
+
+    def open_in_explorer(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showinfo("Info", "No image selected")
+            return
+        selected_file = self.tree.item(selected_item)['values'][0]
+        if " Similarity:" in selected_file:
+            selected_file = selected_file.split(" Similarity:")[0]
+        selected_file = Path(selected_file).resolve()
+        if selected_file.exists():
+            if os.name == 'nt':  # Windows
+                os.system(f'explorer /select,"{selected_file}"')
+            elif os.name == 'posix':
+                # macOS
+                try:
+                    os.system(f'open -R "{selected_file}"')
+                except:
+                    # Linux
+                    os.system(f'xdg-open "{selected_file.parent}"')
+        else:
+            messagebox.showinfo("Info", f"File {selected_file} does not exist")
 
 if __name__ == "__main__":
     root = tk.Tk()
