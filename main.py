@@ -5,7 +5,7 @@ import cv2
 from pathlib import Path
 import time
 from tkinter.ttk import *
-from tkinter import filedialog, messagebox, ttk, simpledialog
+from tkinter import filedialog, messagebox, ttk, simpledialog, Menu
 import pandas as pd
 import threading
 import numpy as np
@@ -34,11 +34,60 @@ class ImSearch:
 
         self.folder_count = 0
         self.folder_path = None
-        self.target_image = None
+        self.query_image = None
         self.target_image_path = None
         self.target_image_label = None
         self.include_subfolders = None
         self.image_files = []
+
+        self.current_language = "English"
+
+        self.languages = {
+            "English": {
+                "add_folder": "Add Folder",
+                "remove_folder": "Remove Folder",
+                "folder_up": "Priority up",
+                "folder_down": "Priority down",
+                "upload_image": "Upload Query Image",
+                "search_mode": "Choose search mode",
+                "search_settings": "Choose search settings",
+                "similarity_threshold": "Similarity threshold",
+                "delete_selected": "Delete Selected",
+                "search_subfolders": "Search subfolders",
+                "selected_image": "Selected Target Image: None",
+                "language": "Language",
+                "start_search": "Start search",
+                "stop_search": "Stop search"
+            },
+            "Spanish": {
+                "add_folder": "Agregar Carpeta",
+                "remove_folder": "Eliminar Carpeta",
+                "folder_up": "Prioridad arriba",
+                "folder_down": "Prioridad abajo",
+                "upload_image": "Subir Imagen de Consulta",
+                "search_mode": "Elija el modo de búsqueda",
+                "search_settings": "Elija la configuración de búsqueda",
+                "similarity_threshold": "Umbral de similitud",
+                "delete_selected": "Eliminar Seleccionado",
+                "search_subfolders": "Buscar en subcarpetas",
+                "selected_image": "Imagen Objetivo Seleccionada: Ninguna",
+                "language": "Idioma",
+                "start_search": "Iniciar búsqueda",
+                "stop_search": "Detener la búsqueda"
+            }
+            # Additional languages can be added here.
+        }
+
+        menubar = Menu(root)
+        root.config(menu=menubar)
+
+        settings_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Settings", menu=settings_menu)
+
+        language_menu = Menu(settings_menu, tearoff=0)
+        for language in self.languages.keys():
+            language_menu.add_command(label=language, command=lambda lang=language: self.change_language(lang))
+        settings_menu.add_cascade(label=self.languages[self.current_language]["language"], menu=language_menu)
 
         # canvas
         self.canvas_uploaded = tk.Canvas(root, bg="white", relief=tk.SUNKEN, borderwidth=1)
@@ -51,63 +100,70 @@ class ImSearch:
         self.folders_listbox.place(x=166, y=10, height=80, width=1034)
 
         # folder button
-        add_folder = ttk.Button(root, text="Add Folder", command=self.add_folder)
-        add_folder.place(x=1212, y=50, height=40, width=140)
+        self.add_folder_button = ttk.Button(root, text=self.languages[self.current_language]["add_folder"], command=self.add_folder)
+        self.add_folder_button.place(x=1212, y=50, height=40, width=140)
 
-        remove_folder = ttk.Button(root, text="Remove Folder", command=self.remove_folder)
-        remove_folder.place(x=1212, y=10, height=40, width=140)
+        self.remove_folder_button = ttk.Button(root, text=self.languages[self.current_language]["remove_folder"], command=self.remove_folder)
+        self.remove_folder_button.place(x=1212, y=10, height=40, width=140)
 
-        folder_up = ttk.Button(root, text="Priority up", command=self.move_up)
-        folder_up.place(x=14, y=10, height=40, width=140)
+        self.folder_up_button = ttk.Button(root, text=self.languages[self.current_language]["folder_up"], command=self.move_up)
+        self.folder_up_button.place(x=14, y=10, height=40, width=140)
 
-        folder_down = ttk.Button(root, text="Priority down", command=self.move_down)
-        folder_down.place(x=14, y=50, height=40, width=140)
+        self.folder_down_button = ttk.Button(root, text=self.languages[self.current_language]["folder_down"], command=self.move_down)
+        self.folder_down_button.place(x=14, y=50, height=40, width=140)
 
         # select image button
-        select_target_button = ttk.Button(root, text="Upload Query Image", command=self.upload_query_image)
-        select_target_button.place(x=496, y=122, height=52, width=374)
+        self.upload_image_button = ttk.Button(root, text=self.languages[self.current_language]["upload_image"], command=self.upload_query_image)
+        self.upload_image_button.place(x=496, y=122, height=52, width=374)
 
         # selected image label
-        self.target_image_label = tk.Label(root, text="Selected Target Image: None")
+        self.target_image_label = ttk.Label(root, text="Selected Target Image: None")
         self.target_image_label.place(x=64, y=720)
 
+        self.search_mode_label = ttk.Label(root, text=self.languages[self.current_language]["search_mode"])
+        self.search_mode_label.place(x=496, y=200)
+
+        self.search_settings_label = ttk.Label(root, text=self.languages[self.current_language]["search_settings"])
+        self.search_settings_label.place(x=496, y=240)
+
+        self.similarity_threshold_label = ttk.Label(root, text=self.languages[self.current_language]["similarity_threshold"])
+        self.similarity_threshold_label.place(x=496, y=280)
+
+        self.sim = tk.Spinbox(self.root, from_=0, to=100)
+        self.sim.delete(0, "end")
+        self.sim.insert(0, "50")
+        self.sim.place(x=650, y=282, height=20, width=32)
+        tk.Label(self.root, text="%", fg="black").place(x=682, y=283, height=20, width=10)
+
         self.search_combobox = ttk.Combobox(root, values=["Find Similar", "Find Duplicates", "Duplicate Pairs", "SSIM Compare"], state="readonly")
-        self.search_combobox.place(x=496, y=192, height=34, width=168)
+        self.search_combobox.place(x=650, y=192, height=34, width=220)
         self.search_combobox.current(0)
 
-        self.search_button = ttk.Button(root, text="Start Search", command=self.perform_search)
-        self.search_button.place(x=710, y=192, height=34, width=160)
+        self.start_search_button = ttk.Button(root, text=self.languages[self.current_language]["start_search"], command=self.run_search)
+        self.start_search_button.place(x=710, y=280, height=34, width=160)
 
-        self.stop_button = ttk.Button(self.root, text="Stop Search", command=self.stop_search)
-        self.stop_button.place(x=710, y=236, height=34, width=160)
-        self.stop_button.config(state=tk.DISABLED)
+        self.stop_search_button = ttk.Button(self.root, text=self.languages[self.current_language]["stop_search"], command=self.stop_search)
+        self.stop_search_button.place(x=710, y=324, height=34, width=160)
+        self.stop_search_button.config(state=tk.DISABLED)
 
-        self.subfolder_button = ttk.Checkbutton(self.root, text="Search subfolders", variable=self.subfolders,
+        self.subfolder_button = ttk.Checkbutton(self.root, text=self.languages[self.current_language]["search_subfolders"], variable=self.subfolders,
                                                 onvalue=1, offvalue=0)
-        self.subfolder_button.place(x=548, y=243)
-
+        self.subfolder_button.place(x=650, y=243)
 
         self.tree_frame = Frame(root)
-        self.tree = ttk.Treeview(self.tree_frame, columns=("Name", "Similarity"), show="headings", selectmode="browse")
+        self.tree = ttk.Treeview(self.tree_frame, columns=("path", "similarity"), show="headings", selectmode="browse")
         verscrlbar = ttk.Scrollbar(self.tree_frame,
                                    orient="vertical",
                                    command=self.tree.yview)
         verscrlbar.pack(side="right", fill="y", pady=1, padx=1)
         self.tree.configure(yscrollcommand=verscrlbar.set)
-        self.tree.heading("Name", text="Name")
-        self.tree.heading("Similarity", text="Similarity (%)")
-        self.tree.column("Name")
-        self.tree.column("Similarity")
+        self.tree.heading("path", text="Image path")
+        self.tree.heading("similarity", text="Similarity (%)")
+        self.tree.column("path")
+        self.tree.column("similarity")
         self.tree.place(x=0, y=0, height=100, width=1340)
         self.tree_frame.place(x=14, y=640, height=100, width=1340)
         self.tree.bind("<<TreeviewSelect>>", self.display_selected)
-
-
-        self.sim = tk.Spinbox(self.root, from_=0, to=100)
-        self.sim.delete(0, "end")
-        self.sim.insert(0, "50")
-        self.sim.place(x=496, y=243, height=20, width=32)
-        tk.Label(self.root, text="%", fg="black").place(x=528, y=243, height=20, width=10)
 
         # Status Bar with Progress Bar
         self.status = tk.StringVar()
@@ -122,17 +178,17 @@ class ImSearch:
         save_button = ttk.Button(root, text="Save Results", command=self.save_results)
         save_button.place(x=708, y=500, height=40, width=100)
 
-        load_button = ttk.Button(root, text="Load Results", command=self.load_results)
-        load_button.place(x=604, y=500, height=40, width=100)
+        self.load_button = ttk.Button(root, text="Load Results", command=self.load_results)
+        self.load_button.place(x=604, y=500, height=40, width=100)
 
-        show_images_button = ttk.Button(self.root, text="Show in full size", command=self.show_images)
-        show_images_button.place(x=496, y=440, height=40, width=374)
+        self.show_images_button = ttk.Button(self.root, text="Show in full size", command=self.show_images)
+        self.show_images_button.place(x=496, y=440, height=40, width=374)
 
-        open_in_explorer_button = ttk.Button(root, text="Open in Explorer", command=self.open_in_explorer)
-        open_in_explorer_button.place(x=540, y=584, height=34, width=120)
+        self.open_in_explorer_button = ttk.Button(root, text="Open in Explorer", command=self.open_in_explorer)
+        self.open_in_explorer_button.place(x=540, y=584, height=34, width=120)
 
-        delete_image_button = ttk.Button(root, text="Delete Selected", command=self.delete_selected)
-        delete_image_button.place(x=700, y=584, height=34, width=120)
+        self.delete_selected_button = ttk.Button(root, text=self.languages[self.current_language]["delete_selected"], command=self.delete_selected)
+        self.delete_selected_button.place(x=700, y=584, height=34, width=120)
 
 
     def upload_query_image(self):
@@ -141,8 +197,8 @@ class ImSearch:
         if file_path:
             self.target_image_path = file_path
             self.target_image_label.config(text=f"Selected Target Image: {os.path.basename(file_path)}")
-            self.target_image = Image.open(file_path, 'r')
-            self.display_uploaded(self.target_image)
+            self.query_image = Image.open(file_path, 'r')
+            self.display_uploaded(self.query_image)
         else:
             self.target_image_label.config(text="Selected Target Image: None")
             messagebox.showinfo("Info", "No target image selected")
@@ -187,13 +243,17 @@ class ImSearch:
     def stop_search(self):
         self.stop_search_flag.set()
 
-    def perform_search(self):
+    def run_search(self):
         if self.search_combobox.get() == "Duplicate Pairs" and not self.folder_path:
-            tk.messagebox.showwarning("Warning", "Please set search folder.")
-        elif not self.target_image_path and not self.folder_path:
-            tk.messagebox.showwarning("Warning", "Please set both file and folder.")
+            tk.messagebox.showinfo("Info", "Please set search folder.")
+        elif not self.query_image and self.folder_path and self.search_combobox.get() != "Duplicate Pairs":
+            tk.messagebox.showinfo("Info", "No file selected. Upload query image to start the search")
+        elif not self.query_image and not self.folder_path and self.search_combobox.get() != "Duplicate Pairs":
+            tk.messagebox.showinfo("Info", "Please set both file and folder.")
+        elif self.query_image and not self.folder_path:
+            tk.messagebox.showinfo("Info", "Please set search folder.")
         else:
-            self.stop_button.config(state=tk.NORMAL)
+            self.stop_search_button.config(state=tk.NORMAL)
             self.tree.delete(*self.tree.get_children())
             include_subfolders = self.subfolders.get() == 1
             files = self.list_files(Path(self.folder_path), include_subfolders)
@@ -207,8 +267,8 @@ class ImSearch:
             elif search_type == "Find Similar":
                 self.search_similar()
             elif search_type == "Duplicate Pairs":
-                self.tree.heading(0, text="Path 1")
-                self.tree.heading(1, text="Path 2")
+                self.tree.heading(0, text="Image 1")
+                self.tree.heading(1, text="Image 2")
                 self.duplicate_pairs()
             elif search_type == "SSIM Compare":
                 self.ssim_compare()
@@ -307,13 +367,6 @@ class ImSearch:
         return files
 
     def search_duplicates(self):
-        if not self.folder_path:
-            messagebox.showinfo("Error", "No folder selected")
-            return
-        if not self.target_image:
-            messagebox.showinfo("Error", "No file selected")
-            return
-
         try:
             self.tree.delete(*self.tree.get_children())
         except Exception as e:
@@ -330,7 +383,7 @@ class ImSearch:
         self.search_thread.start()
 
         # if not self.target_image_path or not self.folder_path:
-        #     tk.messagebox.showwarning("Warning", "Please set both file and folder.")
+        #     tk.messagebox.showinfo("Info", "Please set both file and folder.")
         # else:
         #     self.stop_search_flag.clear()
         #     self.tree.delete(*self.tree.get_children())
@@ -364,19 +417,22 @@ class ImSearch:
 
         end_time = time.time()
         elapsed_time = end_time - start_time
-        if not self.stop_search_flag.is_set():
+        if not self.stop_search_flag.is_set() and analyzed_files_count != 0:
             self.status.set(f"Completed in {elapsed_time:.2f} seconds, {analyzed_files_count} files analyzed")
+            self.progress["value"] = 0
+        else:
+            self.status.set(f"No image files found in selected folders. Try ticking the \"Search subfolders\" option")
             self.progress["value"] = 0
 
         self.reset_ui()
-        self.stop_button.config(state=tk.DISABLED)
+        self.stop_search_button.config(state=tk.DISABLED)
 
     def duplicate_pairs(self):
         if not self.folder_path:
-            tk.messagebox.showwarning("Warning", "Please select a folder.")
+            tk.messagebox.showinfo("Info", "Please select a folder.")
             return
 
-        self.stop_button.config(state=tk.NORMAL)
+        self.stop_search_button.config(state=tk.NORMAL)
         self.stop_search_flag.clear()
         self.status.set("Searching for all duplicate pairs...")
         self.progress['value'] = 0
@@ -415,17 +471,10 @@ class ImSearch:
 
         execution_time = time.time() - start_time
         self.status.set(f"Finished in {execution_time:.2f} seconds.")
-        self.stop_button.config(state=tk.DISABLED)
+        self.stop_search_button.config(state=tk.DISABLED)
         self.progress['value'] = 0
 
     def search_similar(self):
-        if not self.folder_path:
-            messagebox.showinfo("Error", "No folder selected")
-            return
-        if not self.target_image:
-            messagebox.showinfo("Error", "No file selected")
-            return
-
         try:
             self.tree.delete(*self.tree.get_children())
         except Exception as e:
@@ -462,7 +511,7 @@ class ImSearch:
                 hist2 = self.calculate_histogram(image_queued)
                 similarity = self.compare_histograms(hist1, hist2)
                 if similarity >= int(self.sim.get()):
-                    self.tree.insert("", tk.END, values=(file, f"{similarity:.2f}%"))
+                    self.tree.insert("", tk.END, values=(file, f"{similarity:.2f}"))
             self.progress["value"] = count
             self.root.update_idletasks()
         else:
@@ -470,12 +519,15 @@ class ImSearch:
 
         end_time = time.time()
         elapsed_time = end_time - start_time
-        if not self.stop_search_flag.is_set():
+        if not self.stop_search_flag.is_set() and analyzed_files_count != 0:
             self.status.set(f"Completed in {elapsed_time:.2f} seconds, {analyzed_files_count} files analyzed")
+            self.progress["value"] = 0
+        else:
+            self.status.set(f"No image files found in selected folders. Try ticking the \"Search subfolders\" option")
             self.progress["value"] = 0
 
         self.reset_ui()
-        self.stop_button.config(state=tk.DISABLED)
+        self.stop_search_button.config(state=tk.DISABLED)
 
     def calculate_histogram(self, image):
         hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
@@ -577,13 +629,6 @@ class ImSearch:
     #     self.stop_button.config(state=tk.DISABLED)
 
     def ssim_compare(self):
-        if not self.folder_path:
-            messagebox.showinfo("Error", "No folder selected")
-            return
-        if not self.target_image:
-            messagebox.showinfo("Error", "No file selected")
-            return
-
         try:
             self.tree.delete(*self.tree.get_children())
         except Exception as e:
@@ -591,15 +636,14 @@ class ImSearch:
 
         include_subfolders = self.subfolders.get() == 1
         files = self.list_files(Path(self.folder_path), include_subfolders)
-        source_hash = calculate_image_hash(self.target_image_path)
 
         self.progress["maximum"] = len(files)
 
         self.search_thread = threading.Thread(target=self._ssim_compare_thread,
-                                              args=(files, source_hash))
+                                              args=files)
         self.search_thread.start()
 
-    def _ssim_compare_thread(self, files):
+    def _ssim_compare_thread(self, *files):
         start_time = time.time()
         analyzed_files_count = 0
         for count, file in enumerate(files, start=1):
@@ -622,9 +666,8 @@ class ImSearch:
 
                 # Compute SSIM between two images
                 score, diff = structural_similarity(first_gray, second_gray, full=True)
-                if score <= int(self.sim.get()):
+                if score*100 >= int(self.sim.get()):
                     self.tree.insert("", tk.END, values=(file, f"{score*100:.2f}%"))
-                print("Similarity Score: {:.3f}%".format(score * 100))
 
                 # The diff image contains the actual image differences between the two images
                 # and is represented as a floating point data type so we must convert the array
@@ -659,12 +702,15 @@ class ImSearch:
 
         end_time = time.time()
         elapsed_time = end_time - start_time
-        if not self.stop_search_flag.is_set():
+        if not self.stop_search_flag.is_set() and analyzed_files_count != 0:
             self.status.set(f"Completed in {elapsed_time:.2f} seconds, {analyzed_files_count} files analyzed")
+            self.progress["value"] = 0
+        else:
+            self.status.set(f"No image files found in selected folders. Try ticking the \"Search subfolders\" option")
             self.progress["value"] = 0
 
         self.reset_ui()
-        self.stop_button.config(state=tk.DISABLED)
+        self.stop_search_button.config(state=tk.DISABLED)
 
     def save_results(self):
         if not self.tree.get_children():
@@ -753,8 +799,8 @@ class ImSearch:
 
             if target_image_path:
                 self.target_image_path = target_image_path
-                self.target_image = Image.open(target_image_path, 'r')
-                self.display_uploaded(self.target_image)
+                self.query_image = Image.open(target_image_path, 'r')
+                self.display_uploaded(self.query_image)
 
             if similarity_threshold:
                 self.sim.delete(0, tk.END)
@@ -824,9 +870,41 @@ class ImSearch:
         else:
             messagebox.showinfo("Info", f"File {selected_file} does not exist")
 
+    def change_language(self, language):
+        """Change application language and update UI text."""
+        self.current_language = language
+
+        # Update all UI elements with new language text
+        self.add_folder_button.config(text=self.languages[language]["add_folder"])
+        self.remove_folder_button.config(text=self.languages[language]["remove_folder"])
+        self.folder_up_button.config(text=self.languages[language]["folder_up"])
+        self.folder_down_button.config(text=self.languages[language]["folder_down"])
+        self.upload_image_button.config(text=self.languages[language]["upload_image"])
+        self.search_mode_label.config(text=self.languages[language]["search_mode"])
+        self.search_settings_label.config(text=self.languages[language]["search_settings"])
+        self.similarity_threshold_label.config(text=self.languages[language]["similarity_threshold"])
+        self.delete_selected_button.config(text=self.languages[language]["delete_selected"])
+        self.subfolder_button.config(text=self.languages[language]["search_subfolders"])
+        self.target_image_label.config(text=self.languages[language]["selected_image"])
+        self.start_search_button.config(text=self.languages[language]["start_search"])
+        self.stop_search_button.config(text=self.languages[language]["stop_search"])
+
+        # Update language menu label
+        menubar = self.root.winfo_toplevel().config(menu=None)
+        menubar = Menu(self.root)
+        self.root.config(menu=menubar)
+        settings_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Settings", menu=settings_menu)
+
+        # Rebuild language menu with updated text
+        language_menu = Menu(settings_menu, tearoff=0)
+        for lang in self.languages.keys():
+            language_menu.add_command(label=lang, command=lambda lang=lang: self.change_language(lang))
+        settings_menu.add_cascade(label=self.languages[self.current_language]["language"], menu=language_menu)
+
 
 #run from terminal, experimental
-def findSimilar5(self, img_path, folder_path):
+def findSimilar5(self, img_path, folder_path, method):
     try:
         image1 = cv2.imread(Path(img_path))
         hist1 = self.calculate_histogram(image1)
@@ -834,6 +912,14 @@ def findSimilar5(self, img_path, folder_path):
         tk.messagebox.showerror("Error", f"Unable to read source image: {e}")
         return
     files = self.listFiles(Path(folder_path))
+    # if method == 1:
+    #     self.search_duplicates()
+    # elif method == 2:
+    #     self.search_similar()
+    # elif method == 3:
+    #     self.ssim_compare()
+    # elif method == 4:
+    #     self.duplicate_pairs()
     for file in files:
         if file != img_path:  # Exclude the source image itself
             try:
@@ -853,8 +939,8 @@ if __name__ == "__main__":
             app = ImSearch(root)
             root.mainloop()
         case 4:
-            src = sys.argv[1]
+            img = sys.argv[1]
             path = sys.argv[2]
             method = sys.argv[3]
-            if method=="1":findSimilar5(src,path)
-        case _:print("Error\n Correct command main.py [comparing_image] [path_of_search] [method]")
+            if method=="1":findSimilar5(img, path, method)
+        case _:print("Error\n Correct command main.py [query image_path] [folder_search path] [search_method]")
