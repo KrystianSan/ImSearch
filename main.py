@@ -13,7 +13,7 @@ from PIL import Image, ImageTk, UnidentifiedImageError
 from skimage.metrics import structural_similarity
 import csv
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 import torch
@@ -241,7 +241,7 @@ class ImSearch:
         tk.Label(search_frame, text="%", fg="black").pack()
 
 
-        self.search_combobox = ttk.Combobox(search_frame, values=["Vector Similarity", "Find Similar", "Find Duplicates", "Duplicate Pairs", "SSIM Compare", "SIFT Compare"], state="readonly")
+        self.search_combobox = ttk.Combobox(search_frame, values=["Vector Similarity", "Histogram Similarity", "Find Duplicates", "Duplicate Pairs", "SSIM Compare", "SIFT Compare"], state="readonly")
         #self.search_combobox.place(x=650, y=192, height=34, width=220)
         self.search_combobox.pack()
 
@@ -311,11 +311,6 @@ class ImSearch:
 
         tree_frame = Frame(root)
         #tree_frame.pack(side="right", fill="y", pady=1, padx=1)
-        # self.tree = ttk.Treeview(
-        #     results_frame,
-        #     columns=("File Path",),
-        #     show="tree headings"  # Show both tree lines and headings
-        # )
         # self.tree.heading("#0", text="Duplicate Group")
         # self.tree.heading("File Path", text="File Path")
         # self.tree = ttk.Treeview(
@@ -326,24 +321,24 @@ class ImSearch:
         # )
         # self.tree.heading("File 1", text="Primary File")
         # self.tree.heading("File 2", text="Duplicate File")\
-        self.tree = ttk.Treeview(
-            results_frame,
-            columns=("File 1", "File 2"),
-            show="headings",  # For group nodes, use show="tree headings"
-            height=8
-        )
-        self.tree.heading("File 1", text="Primary File")
-        self.tree.heading("File 2", text="Duplicate File")
-        #self.tree = ttk.Treeview(results_frame, columns=("path", "similarity"), show="headings", selectmode="browse")
+        # self.tree = ttk.Treeview(
+        #     results_frame,
+        #     columns=("File 1", "File 2"),
+        #     show="headings",  # For group nodes, use show="tree headings"
+        #     height=8
+        # )
+        # self.tree.heading("File 1", text="Primary File")
+        # self.tree.heading("File 2", text="Duplicate File")
+        self.tree = ttk.Treeview(results_frame, columns=("path", "similarity"), show="headings", height=8, selectmode="browse")
         verscrlbar = ttk.Scrollbar(results_frame,
                                    orient="vertical",
                                    command=self.tree.yview)
         verscrlbar.pack(side="right", fill="y", pady=1, padx=1)
         self.tree.configure(yscrollcommand=verscrlbar.set)
-        #self.tree.heading("path", text="Image path")
-        #self.tree.heading("similarity", text="Similarity (%)")
-        #self.tree.column("path")
-        #self.tree.column("similarity")
+        self.tree.heading("path", text="Image path")
+        self.tree.heading("similarity", text="Similarity (%)")
+        self.tree.column("path")
+        self.tree.column("similarity")
         #self.tree.place(x=0, y=0, height=100, width=1340)
         self.tree.pack(padx=10, pady=10, fill=tk.BOTH)
         #tree_frame.place(x=14, y=640, height=100, width=1340)
@@ -422,7 +417,7 @@ class ImSearch:
 
         #folder_path = Path(folder_path)
         #include_subfolders = self.subfolders.get()
-        #processed = self.process_folder(folder_path, include_subfolders)
+        self.process_folder(folder_path, self.include_subfolders)
         #self.folders_listbox.insert(tk.END, str(folder_path))  # Store as string
         #messagebox.showinfo("Info", f"Processed {processed} new images in folder")
 
@@ -437,18 +432,44 @@ class ImSearch:
     def move_up(self):
         selected_index = self.folders_listbox.curselection()
         if selected_index and selected_index[0] > 0:
-            text = self.folders_listbox.get(selected_index)
-            self.folders_listbox.delete(selected_index)
-            self.folders_listbox.insert(selected_index[0] - 1, text)
-            self.folders_listbox.selection_set(selected_index[0] - 1)
+            # Get current items
+            current_items = list(self.folders_listbox.get(0, tk.END))
+
+            # Swap positions in both listbox and data storage
+            idx = selected_index[0]
+            current_items[idx], current_items[idx - 1] = current_items[idx - 1], current_items[idx]
+
+            # Update listbox
+            self.folders_listbox.delete(0, tk.END)
+            for item in current_items:
+                self.folders_listbox.insert(tk.END, item)
+
+            # Update data storage
+            self.added_folders = current_items
+
+            # Set new selection
+            self.folders_listbox.selection_set(idx - 1)
 
     def move_down(self):
         selected_index = self.folders_listbox.curselection()
         if selected_index and selected_index[0] < self.folders_listbox.size() - 1:
-            text = self.folders_listbox.get(selected_index)
-            self.folders_listbox.delete(selected_index)
-            self.folders_listbox.insert(selected_index[0] + 1, text)
-            self.folders_listbox.selection_set(selected_index[0] + 1)
+            # Get current items
+            current_items = list(self.folders_listbox.get(0, tk.END))
+
+            # Swap positions
+            idx = selected_index[0]
+            current_items[idx], current_items[idx + 1] = current_items[idx + 1], current_items[idx]
+
+            # Update listbox
+            self.folders_listbox.delete(0, tk.END)
+            for item in current_items:
+                self.folders_listbox.insert(tk.END, item)
+
+            # Update data storage
+            self.added_folders = current_items
+
+            # Set new selection
+            self.folders_listbox.selection_set(idx + 1)
 
     def stop_search(self):
         self.stop_search_flag.set()
@@ -563,69 +584,99 @@ class ImSearch:
             if Path(file_path).exists():
                 display_image(file_path, self.canvas_selected)
 
-    def list_files(self, path=Path.cwd(), include_subfolders=False):
-        """List image files in directory using Path objects"""
+    def list_files(self, folders=None, include_subfolders=False):
+        """List image files with strict folder order and sorted traversal using breadth-first for subfolders"""
         files = []
         valid_ext = {".png", ".jpg", ".jpeg", ".bmp", ".ppm", ".pgm"}
 
-        try:
-            # Convert to Path object if not already
-            search_path = Path(path)
+        # Normalize input to list of Path objects
+        if isinstance(folders, (str, Path)):
+            folders = [Path(folders)]
+        elif isinstance(folders, (list, tuple)):
+            folders = [Path(f) for f in folders]
+        else:
+            folders = []
 
-            # Use rglob for recursive search if needed
-            iterator = search_path.rglob('*') if include_subfolders else search_path.glob('*')
+        for folder in folders:
+            try:
+                if not folder.exists() or not folder.is_dir():
+                    continue
 
-            for entry in iterator:
-                if entry.is_file() and entry.suffix.lower() in valid_ext:
-                    files.append(entry.resolve())  # Store absolute paths
+                if include_subfolders:
+                    from collections import deque  # Ensure deque is imported
+                    dir_queue = deque([folder])  # Use deque for efficient FIFO operations
+                    while dir_queue:
+                        current_dir = dir_queue.popleft()  # Get the first directory in the queue
 
-        except Exception as e:
-            print(f"Error accessing {path}: {e}")
+                        # Process files first, sorted by name
+                        entries = sorted(current_dir.iterdir(), key=lambda x: (x.is_file(), x.name))
+                        for entry in entries:
+                            if entry.is_file() and entry.suffix.lower() in valid_ext:
+                                files.append(entry.resolve())
+                            elif entry.is_dir():
+                                dir_queue.append(entry)  # Add subdirectories to the end of the queue
+                else:
+                    # Top-level files only, sorted
+                    for entry in sorted(folder.iterdir()):
+                        if entry.is_file() and entry.suffix.lower() in valid_ext:
+                            files.append(entry.resolve())
+
+            except Exception as e:
+                print(f"Error processing {folder}: {e}")
 
         return files
 
     def run_search(self):
-        if self.search_combobox.get() == "Duplicate Pairs" and not self.folder_path:
-            tk.messagebox.showinfo("Info", "Please set search folder.")
-        elif not self.query_image and self.folder_path and self.search_combobox.get() != "Duplicate Pairs":
+        # Check if a search is already running
+        if self.search_thread and self.search_thread.is_alive():
+            messagebox.showinfo("Info", "A search is already in progress. Please wait or stop the current search.")
+            return
+
+        # Existing condition checks remain unchanged
+        has_folders = bool(self.added_folders)
+
+        if self.search_combobox.get() == "Duplicate Pairs" and not has_folders:
+            tk.messagebox.showinfo("Info", "Please add search folders.")
+        elif not self.query_image and has_folders and self.search_combobox.get() != "Duplicate Pairs":
             tk.messagebox.showinfo("Info", "No file selected. Upload query image to start the search")
-        elif not self.query_image and not self.folder_path and self.search_combobox.get() != "Duplicate Pairs":
-            tk.messagebox.showinfo("Info", "Please set both file and folder.")
-        elif self.query_image and not self.folder_path:
-            tk.messagebox.showinfo("Info", "Please set search folder.")
+        elif not self.query_image and not has_folders and self.search_combobox.get() != "Duplicate Pairs":
+            tk.messagebox.showinfo("Info", "Please add folders and select a query image.")
+        elif self.query_image and not has_folders:
+            tk.messagebox.showinfo("Info", "Please add search folders.")
         else:
             self.tree.delete(*self.tree.get_children())
             include_subfolders = self.subfolders.get() == 1
-            self.files_list = self.list_files(Path(self.folder_path), include_subfolders)
+
+            # Get files from all added folders once
+            self.files_list = self.list_files(self.added_folders, include_subfolders)
             total_files = len(self.files_list)
             self.progress["maximum"] = total_files
             search_type = self.search_combobox.get()
             self.stop_search_button.config(state=tk.NORMAL)
 
+            # Assign all search threads to self.search_thread
             if search_type == "Vector Similarity":
-                self.vector_search()
-            elif search_type == "Find Duplicates":
-                #source_hash = self.calculate_quick_hash(self.target_image_path)
-                self.search_thread = threading.Thread(target=self.search_duplicates)
-                                                      #args=(self.files_list, source_hash))
+                self.search_thread = threading.Thread(target=self.vector_search)
                 self.search_thread.start()
-            elif search_type == "Find Similar":
+            elif search_type == "Find Duplicates":
+                self.search_thread = threading.Thread(target=self.search_duplicates)
+                self.search_thread.start()
+            elif search_type == "Histogram Similarity":
                 image_uploaded = cv2.imdecode(np.fromfile(self.target_image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
                 hist1 = calculate_histogram(image_uploaded)
-                self.search_thread = threading.Thread(target=self.search_similar,
+                self.search_thread = threading.Thread(target=self.search_histogram,
                                                       args=(self.files_list, hist1))
                 self.search_thread.start()
             elif search_type == "Duplicate Pairs":
-                #self.tree.heading(0, text="Image 1")
-                #self.tree.heading(1, text="Image 2")
-                self.duplicate_pairs()
+                self.search_thread = threading.Thread(target=self.duplicate_pairs)
+                self.search_thread.start()
             elif search_type == "SSIM Compare":
                 self.search_thread = threading.Thread(target=self.ssim_compare,
                                                       args=self.files_list)
                 self.search_thread.start()
             elif search_type == "SIFT Compare":
-                self.sift_compare()
-            #self.stop_button.config(state=tk.DISABLED) #executes before the if statement
+                self.search_thread = threading.Thread(target=self.sift_compare)
+                self.search_thread.start()
 
     def get_vector_path(self, folder_path):
         """Get standardized vector storage path for a folder"""
@@ -724,12 +775,59 @@ class ImSearch:
 
         return image_count
 
-    def process_all_folders(self):
-        """Optimized folder processor with progress feedback"""
-        include_subfolders = self.subfolders.get() == 1
-        folders = list(self.folders_listbox.get(0, tk.END))
+    def process_all_folders(self, folders, include_subfolders):
+        """Process folders sequentially with intra-folder parallelism"""
+        all_folders = self._get_folder_structure(folders, include_subfolders)
+        total = len(all_folders)
+        self.root.after(0, self._update_progress_max, total)
 
-        # Get all folders to process
+        for folder_idx, main_folder in enumerate(folders, 1):
+            if self.processing_flag.is_set():
+                break
+
+            # Get all subfolders for current main folder
+            folder_group = [f for f in all_folders if Path(f).is_relative_to(main_folder)]
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {executor.submit(self.process_folder, Path(f)): f
+                           for f in folder_group}
+
+                for future in futures:
+                    if self.processing_flag.is_set():
+                        executor.shutdown(wait=False)
+                        break
+
+                    try:
+                        future.result()
+                    except Exception as e:
+                        print(f"Error in {futures[future]}: {e}")
+
+                    # Update progress for current folder group
+                    self.root.after(0, self._update_progress,
+                                    folder_idx * len(folder_group), total)
+
+    def reprocess_folders(self):
+        """Force reprocessing of all folders in a background thread"""
+        if self.current_processing_thread and self.current_processing_thread.is_alive():
+            self.processing_flag.set()
+            self.current_processing_thread.join(timeout=5)
+
+        # Retrieve Tkinter data in the main thread
+        folders = list(self.folders_listbox.get(0, tk.END))
+        include_subfolders = self.subfolders.get() == 1
+
+        self.processing_flag.clear()
+        self.current_processing_thread = threading.Thread(
+            target=self._reprocess_all_folders,
+            args=(folders, include_subfolders),
+            daemon=True
+        )
+        self.current_processing_thread.start()
+        #elif inna_metoda_indeksowania()
+
+    def _reprocess_all_folders(self, folders, include_subfolders):
+        """Background thread logic for reprocessing"""
+        # Delete existing files first
         all_folders = set()
         for folder in folders:
             if include_subfolders:
@@ -738,40 +836,21 @@ class ImSearch:
             else:
                 all_folders.add(folder)
 
-        total = len(all_folders)
-        self.root.after(0, self._update_progress_max, total)
-
-        # Batch processing with ThreadPool
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            future_to_folder = {
-                executor.submit(self.process_folder, Path(folder)): folder
-                for folder in all_folders
-            }
-
-            for count, future in enumerate(future_to_folder, 1):
-                if self.processing_flag.is_set():
-                    break
-                try:
-                    future.result()  # Get result to catch exceptions
-                except Exception as e:
-                    print(f"Error processing folder: {str(e)}")
-
-                # Throttled GUI updates
-                if count % 5 == 0:
-                    self.root.after(0, self._update_progress, count, total)
-
-        self.root.after(0, self._finalize_processing)
-
-    def reprocess_folders(self):
-        """Force reprocessing of all folders"""
-        for folder in self.folders_listbox.get(0, tk.END):
+        # Delete existing vector/meta files
+        for folder in all_folders:
             vec_path, meta_path = self.get_vector_path(folder)
             if vec_path.exists():
                 os.remove(vec_path)
             if meta_path.exists():
                 os.remove(meta_path)
-            self.process_folder(folder, self.subfolders.get())
-        messagebox.showinfo("Info", "All folders reprocessed with current model")
+
+        # Now reprocess (reuse the existing processing logic)
+        self.process_all_folders(folders, include_subfolders)
+
+        # Show completion message in the main thread
+        self.root.after(0, lambda: messagebox.showinfo(
+            "Info", "All folders reprocessed with current model"
+        ))
 
     def _update_progress_max(self, total):
         """Thread-safe progress max setup"""
@@ -797,118 +876,139 @@ class ImSearch:
             self.processing_flag.set()
             self.current_processing_thread.join(timeout=5)
 
+        # Retrieve Tkinter data in the main thread
+        folders = list(self.folders_listbox.get(0, tk.END))
+        include_subfolders = self.subfolders.get() == 1
+
         self.processing_flag.clear()
         self.current_processing_thread = threading.Thread(
             target=self.process_all_folders,
-            daemon=True  # Important for clean exit
+            args=(folders, include_subfolders),
+            daemon=True
         )
         self.current_processing_thread.start()
 
+    def _get_folder_structure(self, folders, include_subfolders):
+        """Get ordered list of folders with hierarchy"""
+        ordered_folders = []
+        for folder in folders:
+            if include_subfolders:
+                ordered_folders.extend([str(p) for p in Path(folder).rglob('')
+                                        if p.is_dir()])
+            else:
+                ordered_folders.append(str(folder))
+        return ordered_folders
+
+    def _update_vector_progress(self, current, total, folder):
+        """Thread-safe progress update for vector search"""
+        self.progress["value"] = current
+        self.status.set(f"Searching {folder} ({current}/{total})")
+
+    def _complete_vector_search(self, results, elapsed_time):
+        """Finalize search in main thread"""
+        self.tree.delete(*self.tree.get_children())
+        max_results = max(100, int(len(results) * 0.01))
+        for path, similarity in sorted(results, key=lambda x: -x[1])[:max_results]:
+            self.tree.insert("", tk.END, values=(path, f"{similarity:.2f}%"))
+
+        self.status.set(f"Found {len(results)} matches in {elapsed_time:.2f}s")
+        self.progress["value"] = 0
+        self.stop_search_button.config(state=tk.DISABLED)
+
     def vector_search(self):
-        """Entry point for vector similarity search"""
+        """Entry point with explicit folder order"""
         try:
             self.tree.delete(*self.tree.get_children())
+            query_vector = self.vector_extractor.extract(Path(self.target_image_path))
+
+            if query_vector is None:
+                messagebox.showerror("Error", "Feature extraction failed")
+                return
+
+            # Get folders in listbox order
+            folders = list(self.folders_listbox.get(0, tk.END))
+            include_subfolders = self.subfolders.get() == 1
+
+            # Generate ordered vector file list
+            vector_files = []
+            for folder in folders:
+                folder_path = Path(folder)
+                if include_subfolders:
+                    for root, _, _ in os.walk(folder_path):
+                        vec_file = self.get_vector_path(root)[0]
+                        if vec_file.exists():
+                            vector_files.append(vec_file)
+                else:
+                    vec_file = self.get_vector_path(folder_path)[0]
+                    if vec_file.exists():
+                        vector_files.append(vec_file)
+
+            if not vector_files:
+                messagebox.showinfo("Info", "Process folders first")
+                return
+
+            # Start thread with ordered files
+            self.progress["maximum"] = len(vector_files)
+            self.search_thread = threading.Thread(
+                target=self._vector_search_thread,
+                args=(vector_files, query_vector),
+                daemon=True
+            )
+            self.stop_search_button.config(state=tk.NORMAL)
+            self.search_thread.start()
+
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-        query_vector = self.vector_extractor.extract(Path(self.target_image_path))
-        if query_vector is None:
-            messagebox.showerror("Error", "Could not extract features from query image")
-            return
-
-        # Collect all vector database paths
-        vector_files = []
-        for folder in self.folders_listbox.get(0, tk.END):
-            folder_path = Path(folder)
-            if self.subfolders.get():
-                for root, _, _ in os.walk(folder):
-                    vec_file, _ = self.get_vector_path(root)
-                    if vec_file.exists():
-                        vector_files.append(vec_file)
-            else:
-                vec_file, _ = self.get_vector_path(folder)
-                if vec_file.exists():
-                    vector_files.append(vec_file)
-
-        if not vector_files:
-            messagebox.showinfo("Info", "No precomputed vectors found. Process folders first.")
-            return
-
-        self.progress["maximum"] = len(vector_files)
-        self.search_thread = threading.Thread(target=self._vector_search_thread,
-                                              args=(vector_files, query_vector))
-        self.search_thread.start()
-
     def _vector_search_thread(self, vector_files, query_vector):
-        """Threaded vector search with strict similarity checks"""
-        # Verify query vector dimensions
-        if query_vector.shape[0] != 512:
-            messagebox.showerror("Error",
-                                 f"Query vector dimension mismatch (expected 512, got {query_vector.shape[0]})")
-            return
-
-        # Add dimension check for stored vectors
-        for vec_file in vector_files:
-            vectors = np.load(vec_file, mmap_mode='r')
-            if vectors.shape[1] != 512:
-                messagebox.showerror("Error",
-                                     f"Dimension mismatch in {vec_file.parent}\n"
-                                     f"Please reprocess this folder")
-                return
-        start_time = time.time()
-        results = []
-        query_norm = np.linalg.norm(query_vector)
-
-        # Calculate baseline similarity with self-check
-        self_similarity = np.dot(query_vector, query_vector)  # Should be 1.0
-        min_threshold = max(int(self.sim.get()), 70)  # Enforce minimum 70% threshold
-
+        """Threaded vector search with ordered processing"""
         try:
-            for count, vec_file in enumerate(vector_files, 1):
+            # Validate vector dimensions first
+            if query_vector.shape[0] != 512:
+                self.root.after(0, messagebox.showerror,
+                                "Error", "Query vector dimension mismatch (expected 512)")
+                return
+
+            results = []
+            start_time = time.time()
+            total_files = len(vector_files)
+
+            for idx, vec_file in enumerate(vector_files, 1):
                 if self.stop_search_flag.is_set():
                     break
 
-                self.status.set(f"Searching {vec_file.parent} ({count}/{len(vector_files)})")
-                self.progress["value"] = count
-                self.root.update_idletasks()
+                # Update progress in main thread
+                self.root.after(0, self._update_vector_progress,
+                                idx, total_files, vec_file.parent)
 
-                vectors = np.load(vec_file, mmap_mode='r')
-                meta_file = vec_file.parent / METADATA_FILE
-                meta_df = pd.read_csv(meta_file)
+                # Process current vector file
+                try:
+                    vectors = np.load(vec_file, mmap_mode='r')
+                    meta_file = vec_file.parent / METADATA_FILE
+                    meta_df = pd.read_csv(meta_file)
 
-                # Calculate strict similarity with angular distance
-                similarities = np.dot(vectors, query_vector)
+                    # Calculate similarities
+                    similarities = np.dot(vectors, query_vector)
+                    euclidean_dists = np.linalg.norm(vectors - query_vector, axis=1)
 
-                # Secondary check: Euclidean distance threshold
-                euclidean_dists = np.linalg.norm(vectors - query_vector, axis=1)
+                    # Apply thresholds
+                    for i, (sim, dist) in enumerate(zip(similarities, euclidean_dists)):
+                        sim_percent = sim * 100
+                        if (sim_percent >= max(int(self.sim.get()), 70) and
+                                dist <= 0.5 and
+                                sim_percent >= self._calculate_adaptive_threshold(similarities)):
+                            results.append((meta_df.iloc[i]['path'], sim_percent))
 
-                for idx, (similarity, dist) in enumerate(zip(similarities, euclidean_dists)):
-                    similarity_percent = similarity * 100
+                except Exception as e:
+                    print(f"Error processing {vec_file}: {str(e)}")
 
-                    # Combined threshold criteria
-                    if (similarity_percent >= min_threshold and
-                            dist <= 0.5 and  # Corresponds to ~86% cosine similarity
-                            similarity_percent >= self._calculate_adaptive_threshold(similarities)):
-                        results.append((
-                            meta_df.iloc[idx]['path'],
-                            similarity_percent
-                        ))
-
-            # Sort and display top 1% results or max 100 items
-            max_results = max(100, int(len(results) * 0.01))
-            results.sort(key=lambda x: -x[1])
-            for path, similarity in results[:max_results]:
-                self.tree.insert("", tk.END, values=(path, f"{similarity:.2f}%"))
+            # Finalize in main thread
+            elapsed = time.time() - start_time
+            self.root.after(0, self._complete_vector_search, results, elapsed)
 
         except Exception as e:
-            messagebox.showerror("Error", f"Vector search failed: {str(e)}")
-
-        finally:
-            elapsed_time = time.time() - start_time
-            self.status.set(
-                f"Found {len(results)} matches in {elapsed_time} seconds")
-            self.progress["value"] = 0
-            self.stop_search_button.config(state=tk.DISABLED)
+            self.root.after(0, messagebox.showerror,
+                            "Search Error", str(e))
 
     def _calculate_adaptive_threshold(self, similarities):
         """Calculate dynamic threshold based on similarity distribution"""
@@ -920,7 +1020,7 @@ class ImSearch:
         threshold = np.percentile(similarities, 90) * 100
         return max(threshold, 70)  # Minimum 70% threshold
 
-    def search_similar(self, files, hist1):
+    def search_histogram(self, files, hist1):
         start_time = time.time()
         analyzed_files_count = 0
         files_found = 0
@@ -955,6 +1055,8 @@ class ImSearch:
 
         self.reset_ui()
         self.stop_search_button.config(state=tk.DISABLED)
+
+        self.search_thread = None
 
     def search_duplicates(self):
         """Find all duplicates of the target image using parallel processing"""
@@ -1044,6 +1146,8 @@ class ImSearch:
         self.progress["value"] = 0
         self.stop_search_button.config(state=tk.DISABLED)
 
+        self.search_thread = None
+
     def duplicate_pairs(self):
         """Find all duplicate groups in the dataset using hash grouping"""
         if not self.folder_path:
@@ -1053,8 +1157,8 @@ class ImSearch:
         self.status.set("Searching for duplicate groups...")
         self.progress['value'] = 0
 
-        search_thread = threading.Thread(target=self._duplicate_pairs_thread)
-        search_thread.start()
+        # Thread management now handled in run_search
+        self._duplicate_pairs_thread()
 
     def _duplicate_pairs_thread(self):
         """Threaded duplicate group search with optimized grouping"""
@@ -1114,6 +1218,8 @@ class ImSearch:
         self.status.set(f"Found {len(hash_groups)} groups in {elapsed_time:.2f}s")
         self.progress['value'] = 0
         self.stop_search_button.config(state=tk.DISABLED)
+
+        self.search_thread = None
 
     def _initialize_sift(self):
         """Initialize SIFT detector with version checking"""
@@ -1192,6 +1298,8 @@ class ImSearch:
         self.progress["value"] = 0
         self.stop_search_button.config(state=tk.DISABLED)
 
+        self.search_thread = None
+
     def _process_sift_file(self, file, bf, des1, min_matches, ratio_thresh):
         try:
             target_img = cv2.imread(str(file), cv2.IMREAD_GRAYSCALE)
@@ -1226,209 +1334,6 @@ class ImSearch:
             print(f"Error processing {file}: {str(e)}")
         return None
 
-    def _process_sift_file_enhanced(self, file, matcher, kp1, des1, min_matches, ratio_thresh):
-        try:
-            target_img = cv2.imread(str(file), cv2.IMREAD_GRAYSCALE)
-            if target_img is None:
-                return None
-
-            target_sift = cv2.SIFT_create(contrastThreshold=0.01, edgeThreshold=10)
-            kp2, des2 = target_sift.detectAndCompute(target_img, None)
-
-            if des2 is None or len(des2) < min_matches:
-                return None
-
-            # Feature matching with error handling
-            raw_matches = matcher.knnMatch(des1, des2, k=2)
-
-            # Modified ratio test with type checking
-            good = []
-            for match_pair in raw_matches:
-                if len(match_pair) < 2:
-                    continue  # Skip incomplete pairs
-
-                m, n = match_pair
-
-                # Ensure both matches are valid DMatch objects
-                if not (hasattr(m, 'distance') and hasattr(n, 'distance')):
-                    continue
-
-                try:
-                    # Explicit type conversion and validation
-                    m_dist = float(m.distance)
-                    n_dist = float(n.distance)
-                    if m_dist < ratio_thresh * n_dist:
-                        good.append(m)
-                except (TypeError, ValueError) as e:
-                    print(f"Skipping invalid distance values: {str(e)}")
-                    continue
-
-            # Geometric verification
-            if len(good) >= 4:
-                src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-
-                try:
-                    M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-                    if mask is not None:
-                        good = [good[i] for i in range(len(mask)) if mask[i]]
-                except cv2.error as e:
-                    print(f"Homoography error in {file}: {str(e)}")
-                    return None
-
-            if len(good) < min_matches:
-                return None
-
-            # Similarity calculation
-            total_features = (len(des1) + len(des2)) / 2
-            similarity = (len(good) / total_features) * 100
-
-            if similarity >= max(int(self.sim.get()), 5):
-                return (str(file), f"{similarity:.2f}%")
-
-        except Exception as e:
-            print(f"Error processing {file}: {str(e)}")
-        return None
-
-    def _process_sift_file_original_style(self, file, bf, des1, min_matches, ratio_thresh):
-        try:
-            target_img = cv2.imread(str(file), cv2.IMREAD_GRAYSCALE)
-            if target_img is None:
-                return None
-
-            sift = cv2.SIFT_create(contrastThreshold=0.01, edgeThreshold=5)  # Consistent with thread method
-            kp2, des2 = sift.detectAndCompute(target_img, None)
-
-            if des2 is None or len(des2) < min_matches:
-                return None
-
-            # Perform KNN matching with k=2
-            matches = bf.knnMatch(des1, des2, k=2)
-
-            # Apply ratio test with adjusted threshold
-            good = []
-            for m, n in matches:
-                if m.distance < ratio_thresh * n.distance:
-                    good.append(m)
-
-            if len(good) < min_matches:
-                return None
-
-            # Calculate similarity based on the minimum descriptors to get higher relevance for smaller sets
-            min_des = min(len(des1), len(des2))
-            similarity = (len(good) / min_des) * 100  # Adjusted similarity calculation
-
-            # Apply user threshold (now more results due to higher similarity values)
-            if similarity >= int(self.sim.get()):
-                return (str(file), f"{similarity:.2f}%")
-
-        except Exception as e:
-            print(f"Error processing {file}: {str(e)}")
-        return None
-
-    # def _process_sift_file(self, file, bf, des1, min_matches, ratio_thresh):
-    #     try:
-    #         target_img = cv2.imread(str(file), cv2.IMREAD_GRAYSCALE)
-    #         if target_img is None:
-    #             return None
-    #
-    #         sift = cv2.SIFT_create(contrastThreshold=0.01, edgeThreshold=7)
-    #         kp2, des2 = sift.detectAndCompute(target_img, None)
-    #
-    #         if des2 is None or len(des2) < min_matches:
-    #             return None
-    #
-    #         # Original matching logic
-    #         matches = bf.knnMatch(des1, des2, k=2)
-    #
-    #         # Original ratio test implementation
-    #         good = []
-    #         for m, n in matches:
-    #             if m.distance < ratio_thresh * n.distance:
-    #                 good.append(m)
-    #
-    #         if len(good) < min_matches:
-    #             return None
-    #
-    #         similarity = (len(good) / len(des1)) * 100  # Original similarity calculation
-    #
-    #         self.analyzed_files_count += 1
-    #         self.status.set(f"Analyzing {file.name} ({self.analyzed_files_count})")
-    #
-    #         if similarity >= int(self.sim.get()):
-    #             return (str(file), f"{similarity:.2f}%")
-    #
-    #     except Exception as e:
-    #         print(f"Error processing {file}: {str(e)}")
-    #     return None
-
-
-
-    def _finalize_search(self, elapsed_time):
-        self.status.set(f"Completed in {elapsed_time:.2f} seconds")
-        self.progress["value"] = 0
-        self.stop_search_button.config(state=tk.DISABLED)
-
-    def _insert_single_result(self, file_path, similarity):
-        self.tree.insert("", tk.END, values=(file_path, f"{similarity:.2f}%"))
-
-    def _update_progress_single(self, current, total):
-        self.progress["value"] = current
-        self.status.set(f"Processing {current}/{total} files")
-
-    def _extract_features(self, file_path):
-        """Thread-safe feature extraction method"""
-        try:
-            if not Path(file_path).exists():
-                return None
-
-            # Load and preprocess image
-            img = cv2.imread(str(file_path), cv2.IMREAD_GRAYSCALE)
-            if img is None:
-                return None
-
-            # Resize with aspect ratio (max 800px)
-            h, w = img.shape
-            scale = 800 / max(h, w)
-            img = cv2.resize(img, (0, 0), fx=scale, fy=scale,
-                             interpolation=cv2.INTER_AREA)
-
-            # Extract features
-            kp, des = self.sift.detectAndCompute(img, None)
-            return (kp, des) if des is not None else None
-
-        except Exception as e:
-            print(f"Feature extraction failed for {file_path}: {str(e)}")
-            return None
-
-    def precompute_features(self):
-        if not hasattr(self, 'sift') or self.sift is None:
-            messagebox.showerror("Error", "SIFT detector not initialized")
-            return
-
-        include_subfolders = self.subfolders.get() == 1
-        files = self.list_files(Path(self.folder_path), include_subfolders)
-
-        self.progress["maximum"] = len(files)
-        self.status.set("Precomputing features...")
-
-        with ThreadPoolExecutor(max_workers=os.cpu_count() * 2) as executor:
-            future_to_file = {executor.submit(self._extract_features, f): f
-                              for f in files}
-
-            for count, future in enumerate(future_to_file, 1):
-                file = future_to_file[future]
-                try:
-                    features = future.result()
-                    if features:
-                        self.feature_cache[file] = features
-                except Exception as e:
-                    print(f"Error processing {file}: {str(e)}")
-
-                self.progress["value"] = count
-                self.status.set(f"Precomputed {count}/{len(files)}")
-                self.root.update_idletasks()
-
     def ssim_compare(self, *files):
         start_time = time.time()
         analyzed_files_count = 0
@@ -1439,7 +1344,7 @@ class ImSearch:
                 self.status.set(f"Search stopped by user. {analyzed_files_count} files analyzed")
                 break
 
-            self.status.set(f"Analyzing {file.name} ({count}/{len(files)})")
+            self.status.set(f"Analyzing {file} ({count}/{len(files)})")
             self.root.update_idletasks()
 
             if Image.open(self.target_image_path).width == Image.open(file).width and Image.open(self.target_image_path).height == Image.open(file).height:
@@ -1498,6 +1403,8 @@ class ImSearch:
 
         self.reset_ui()
         self.stop_search_button.config(state=tk.DISABLED)
+
+        self.search_thread = None
 
     def save_results(self):
         if not self.tree.get_children():
@@ -1701,7 +1608,7 @@ def findSimilar5(self, img_path, folder_path, method):
     # if method == 1:
     #     self.search_duplicates()
     # elif method == 2:
-    #     self.search_similar()
+    #     self.search_histogram()
     # elif method == 3:
     #     self.ssim_compare()
     # elif method == 4:
