@@ -377,8 +377,6 @@ class ImSearch:
         #self.delete_selected_button.place(x=700, y=584, height=34, width=120)
         self.delete_selected_button.pack()
 
-        #Folder_frame(self)
-
         # Add processing control variables
         self.processing_flag = threading.Event()
         self.current_processing_thread = None
@@ -403,23 +401,17 @@ class ImSearch:
 
     def add_folder(self):
         folder_path = filedialog.askdirectory()
-        if not folder_path: return
+        if not folder_path:
+            return
 
+        # Simple duplicate check (exact match only)
         if folder_path in self.added_folders:
-            messagebox.showinfo("Info", "This folder has already been added.")
+            messagebox.showinfo("Info", "This exact folder path is already added")
             return
 
         self.added_folders.append(folder_path)
-        self.folders_listbox.insert(self.folder_count, folder_path)
+        self.folders_listbox.insert(tk.END, folder_path)
         self.folder_count += 1
-        self.folder_path = folder_path
-        self.start_folder_processing()
-
-        #folder_path = Path(folder_path)
-        #include_subfolders = self.subfolders.get()
-        self.process_folder(folder_path, self.include_subfolders)
-        #self.folders_listbox.insert(tk.END, str(folder_path))  # Store as string
-        #messagebox.showinfo("Info", f"Processed {processed} new images in folder")
 
     def remove_folder(self):
         selected_folder_name = self.folders_listbox.get(self.folders_listbox.curselection())
@@ -432,43 +424,27 @@ class ImSearch:
     def move_up(self):
         selected_index = self.folders_listbox.curselection()
         if selected_index and selected_index[0] > 0:
-            # Get current items
-            current_items = list(self.folders_listbox.get(0, tk.END))
-
-            # Swap positions in both listbox and data storage
             idx = selected_index[0]
-            current_items[idx], current_items[idx - 1] = current_items[idx - 1], current_items[idx]
-
-            # Update listbox
-            self.folders_listbox.delete(0, tk.END)
-            for item in current_items:
-                self.folders_listbox.insert(tk.END, item)
-
-            # Update data storage
-            self.added_folders = current_items
-
-            # Set new selection
+            # Swap in listbox
+            self.folders_listbox.insert(idx - 1, self.folders_listbox.get(idx))
+            self.folders_listbox.delete(idx + 1)
+            # Swap in data storage
+            self.added_folders.insert(idx - 1, self.added_folders.pop(idx))
+            # Maintain selection
+            self.folders_listbox.selection_clear(0, tk.END)
             self.folders_listbox.selection_set(idx - 1)
 
     def move_down(self):
         selected_index = self.folders_listbox.curselection()
         if selected_index and selected_index[0] < self.folders_listbox.size() - 1:
-            # Get current items
-            current_items = list(self.folders_listbox.get(0, tk.END))
-
-            # Swap positions
             idx = selected_index[0]
-            current_items[idx], current_items[idx + 1] = current_items[idx + 1], current_items[idx]
-
-            # Update listbox
-            self.folders_listbox.delete(0, tk.END)
-            for item in current_items:
-                self.folders_listbox.insert(tk.END, item)
-
-            # Update data storage
-            self.added_folders = current_items
-
-            # Set new selection
+            # Swap in listbox
+            self.folders_listbox.insert(idx + 2, self.folders_listbox.get(idx))
+            self.folders_listbox.delete(idx)
+            # Swap in data storage
+            self.added_folders.insert(idx + 1, self.added_folders.pop(idx))
+            # Maintain selection
+            self.folders_listbox.selection_clear(0, tk.END)
             self.folders_listbox.selection_set(idx + 1)
 
     def stop_search(self):
@@ -516,28 +492,37 @@ class ImSearch:
         self.canvas_selected.delete("all")
 
         def display_image(file_path, canvas):
-            """Helper to display an image on a specified canvas"""
+            """Helper to display an image fitted within canvas while maintaining aspect ratio"""
             try:
                 image = Image.open(file_path)
+                canvas.update_idletasks()  # Get accurate canvas dimensions
                 canvas_width = canvas.winfo_width()
                 canvas_height = canvas.winfo_height()
 
-                # Calculate scaling to fit canvas
+                # Calculate scaling to fit within canvas
                 width_ratio = canvas_width / image.width
                 height_ratio = canvas_height / image.height
                 scale = min(width_ratio, height_ratio)
 
-                if scale < 1:
+                # Only resize if needed
+                if scale < 1 or scale > 1:  # Handle both upsizing and downsizing
                     new_size = (int(image.width * scale), int(image.height * scale))
                     image = image.resize(new_size, Image.Resampling.LANCZOS)
 
                 img_tk = ImageTk.PhotoImage(image)
+                canvas.delete("all")
                 canvas.image = img_tk  # Keep reference
+
+                # Center the image in canvas
+                x = (canvas_width - image.width) // 2
+                y = (canvas_height - image.height) // 2
+
                 canvas.create_image(
-                    (canvas_width - image.width) // 2,
-                    (canvas_height - image.height) // 2,
-                    anchor=tk.NW, image=img_tk
+                    x, y,
+                    anchor=tk.NW,
+                    image=img_tk
                 )
+
             except Exception as e:
                 print(f"Error displaying {file_path}: {str(e)}")
 
@@ -585,39 +570,40 @@ class ImSearch:
                 display_image(file_path, self.canvas_selected)
 
     def list_files(self, folders=None, include_subfolders=False):
-        """List image files with strict folder order and sorted traversal using breadth-first for subfolders"""
+        """Process folders in listbox order, prioritizing subfolders of earlier entries"""
         files = []
         valid_ext = {".png", ".jpg", ".jpeg", ".bmp", ".ppm", ".pgm"}
+        processed_paths = set()
 
-        # Normalize input to list of Path objects
-        if isinstance(folders, (str, Path)):
-            folders = [Path(folders)]
-        elif isinstance(folders, (list, tuple)):
-            folders = [Path(f) for f in folders]
-        else:
-            folders = []
+        # Convert to resolved Path objects
+        folders = [Path(f).resolve() for f in folders]
 
+        # Process in listbox order while filtering subpaths
         for folder in folders:
+            # Skip if already processed as subfolder of previous entry
+            if any(folder.is_relative_to(p) for p in processed_paths):
+                continue
+
+            processed_paths.add(folder)
+
             try:
-                if not folder.exists() or not folder.is_dir():
-                    continue
-
                 if include_subfolders:
-                    from collections import deque  # Ensure deque is imported
-                    dir_queue = deque([folder])  # Use deque for efficient FIFO operations
-                    while dir_queue:
-                        current_dir = dir_queue.popleft()  # Get the first directory in the queue
+                    # Depth-first search to prioritize subfolders of current folder
+                    dir_stack = [folder]
+                    while dir_stack:
+                        current_dir = dir_stack.pop()
+                        entries = sorted(current_dir.iterdir(), key=lambda x: (x.is_file(), x.name), reverse=True)
 
-                        # Process files first, sorted by name
-                        entries = sorted(current_dir.iterdir(), key=lambda x: (x.is_file(), x.name))
                         for entry in entries:
+                            entry_path = entry.resolve()
                             if entry.is_file() and entry.suffix.lower() in valid_ext:
-                                files.append(entry.resolve())
+                                files.append(entry_path)
                             elif entry.is_dir():
-                                dir_queue.append(entry)  # Add subdirectories to the end of the queue
+                                # Add subdirectories to stack first (depth-first)
+                                dir_stack.append(entry_path)
                 else:
-                    # Top-level files only, sorted
-                    for entry in sorted(folder.iterdir()):
+                    # Process top-level files
+                    for entry in folder.iterdir():
                         if entry.is_file() and entry.suffix.lower() in valid_ext:
                             files.append(entry.resolve())
 
@@ -1029,7 +1015,7 @@ class ImSearch:
             if self.stop_search_flag.is_set():
                 self.status.set(f"Search stopped by user. {analyzed_files_count} files analyzed")
                 break
-            self.status.set(f"Analyzing {file.name} ({count}/{len(files)})")
+            self.status.set(f"Analyzing {file.name} ({count}/{len(files)}) - {files_found} matches found")
             self.root.update_idletasks()
             analyzed_files_count += 1
             if file != self.target_image_path:
@@ -1066,7 +1052,8 @@ class ImSearch:
             messagebox.showerror("Error", str(e))
 
         include_subfolders = self.subfolders.get() == 1
-        files = self.list_files(Path(self.folder_path), include_subfolders)
+        # Use added_folders instead of folder_path
+        files = self.list_files(self.added_folders, include_subfolders)
         self.progress["maximum"] = len(files)
 
         # Pre-calculate target hash once
@@ -1243,6 +1230,7 @@ class ImSearch:
         """Entry point for SIFT-based similarity search"""
         try:
             self.tree.delete(*self.tree.get_children())
+            self.stop_search_flag.clear()  # Reset stop flag when starting new search
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -1250,15 +1238,18 @@ class ImSearch:
         files = self.list_files(Path(self.folder_path), include_subfolders)
         self.progress["maximum"] = len(files)
 
+        # Limit thread count to reduce CPU load (adjust max_workers as needed)
+        max_workers = max(2, os.cpu_count() // 2)  # Reduced from full CPU count
         self.search_thread = threading.Thread(target=self._sift_compare_thread,
-                                              args=(files,))
+                                              args=(files, max_workers))
         self.search_thread.start()
 
-    def _sift_compare_thread(self, files):
+    def _sift_compare_thread(self, files, max_workers):
         start_time = time.time()
+        processed_count = 0
+        files_found = 0  # Track matching files
 
-        # Use original SIFT parameters
-        sift = cv2.SIFT_create(contrastThreshold=0.07, edgeThreshold=5)  # More keypoints
+        sift = cv2.SIFT_create(contrastThreshold=0.07, edgeThreshold=5)
         query_img = cv2.imread(self.target_image_path, cv2.IMREAD_GRAYSCALE)
         kp1, des1 = sift.detectAndCompute(query_img, None)
 
@@ -1266,44 +1257,71 @@ class ImSearch:
             self.status.set("No features found in query image")
             return
 
-        # Maintain original matching approach but optimized
         bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+        MIN_MATCHES = 5
+        RATIO_THRESH = 0.9
+        total_files = len(files)
 
-        # Similarity calculation parameters from original version
-        MIN_MATCHES = 5  # Minimum matches to consider
-        RATIO_THRESH = 0.9  # Lowe's ratio
-
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
             for file in files:
                 if self.stop_search_flag.is_set():
                     break
-
                 futures.append(executor.submit(
                     self._process_sift_file,
                     file, bf, des1, MIN_MATCHES, RATIO_THRESH
                 ))
 
-            for future in futures:
+            # Process completed tasks and update progress
+            for future in as_completed(futures):
                 if self.stop_search_flag.is_set():
+                    for f in futures:
+                        f.cancel()
                     break
 
-                result = future.result()
-                if result:
-                    self.tree.insert("", tk.END, values=result)
+                processed_count += 1
+                self.progress["value"] = processed_count
+
+                # Update status every 5 files or when processing takes time
+                if processed_count % 5 == 0 or processed_count == total_files:
+                    self.status.set(
+                        f"Analyzing files ({processed_count}/{total_files}) - "
+                        f"{files_found} matches found"
+                    )
                     self.root.update_idletasks()
 
+                try:
+                    result = future.result()
+                    if result:
+                        self.tree.insert("", tk.END, values=result)
+                        files_found += 1
+                except Exception as e:
+                    continue
+
         elapsed_time = time.time() - start_time
-        self.status.set(f"SIFT compare completed in {elapsed_time:.2f}s")
+        stop_status = "stopped" if self.stop_search_flag.is_set() else "completed"
+        status_message = (
+            f"{stop_status.capitalize()} in {elapsed_time:.2f}s - "
+            f"{processed_count} files analyzed, "
+            f"{files_found} matches found"
+        )
+        self.status.set(status_message)
         self.progress["value"] = 0
         self.stop_search_button.config(state=tk.DISABLED)
-
+        self.stop_search_flag.clear()
         self.search_thread = None
 
     def _process_sift_file(self, file, bf, des1, min_matches, ratio_thresh):
+        if self.stop_search_flag.is_set():
+            return None
+
         try:
             target_img = cv2.imread(str(file), cv2.IMREAD_GRAYSCALE)
             if target_img is None:
+                return None
+
+            # Check stop flag before heavy computation
+            if self.stop_search_flag.is_set():
                 return None
 
             sift = cv2.SIFT_create(contrastThreshold=0.01, edgeThreshold=5)
@@ -1312,23 +1330,69 @@ class ImSearch:
             if des2 is None or len(des2) < min_matches:
                 return None
 
-            # Original matching logic
             matches = bf.knnMatch(des1, des2, k=2)
-
-            # Original ratio test implementation
             good = []
             for m, n in matches:
                 if m.distance < ratio_thresh * n.distance:
                     good.append(m)
+                if self.stop_search_flag.is_set():
+                    return None
 
             if len(good) < min_matches:
                 return None
 
-            similarity = (len(good) / len(des1)) * 100  # Original similarity calculation
-            self.analyzed_files_count += 1
+            def _sift_compare_thread(self, files, max_workers):
+                start_time = time.time()
+                processed_count = 0  # Track total processed files
 
-            if similarity >= int(self.sim.get()):
-                return (str(file), f"{similarity:.2f}%")
+                sift = cv2.SIFT_create(contrastThreshold=0.07, edgeThreshold=5)
+                query_img = cv2.imread(self.target_image_path, cv2.IMREAD_GRAYSCALE)
+                kp1, des1 = sift.detectAndCompute(query_img, None)
+
+                if des1 is None or len(des1) < 10:
+                    self.status.set("No features found in query image")
+                    return
+
+                bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+                MIN_MATCHES = 5
+                RATIO_THRESH = 0.9
+
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = []
+                    for file in files:
+                        if self.stop_search_flag.is_set():
+                            break
+                        futures.append(executor.submit(
+                            self._process_sift_file,
+                            file, bf, des1, MIN_MATCHES, RATIO_THRESH
+                        ))
+
+                    # Process completed tasks and update progress
+                    for future in as_completed(futures):
+                        if self.stop_search_flag.is_set():
+                            for f in futures:
+                                f.cancel()
+                            break
+
+                        processed_count += 1
+                        self.progress["value"] = processed_count
+                        self.root.update_idletasks()
+
+                        try:
+                            result = future.result()
+                            if result:
+                                self.tree.insert("", tk.END, values=result)
+                        except Exception as e:
+                            continue
+
+                elapsed_time = time.time() - start_time
+                stop_status = "stopped" if self.stop_search_flag.is_set() else "completed"
+                self.status.set(
+                    f"SIFT compare {stop_status} in {elapsed_time:.2f}s - Processed {processed_count} files")
+                self.progress["value"] = 0
+                self.stop_search_button.config(state=tk.DISABLED)
+                self.stop_search_flag.clear()
+                self.search_thread = None
 
         except Exception as e:
             print(f"Error processing {file}: {str(e)}")
@@ -1344,7 +1408,7 @@ class ImSearch:
                 self.status.set(f"Search stopped by user. {analyzed_files_count} files analyzed")
                 break
 
-            self.status.set(f"Analyzing {file} ({count}/{len(files)})")
+            self.status.set(f"Analyzing ({count}/{len(files)}) - {files_found} matches found")
             self.root.update_idletasks()
 
             if Image.open(self.target_image_path).width == Image.open(file).width and Image.open(self.target_image_path).height == Image.open(file).height:
