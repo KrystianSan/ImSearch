@@ -83,8 +83,9 @@ class ImSearch:
         self.root = root
         self.root.title("ImSearch")
         self.root.geometry("1366x768")
+        root.minsize(1000, 600)
         root.columnconfigure(0, weight=1)
-        root.columnconfigure(1, weight=1)
+        root.columnconfigure(1, weight=0)
         root.columnconfigure(2, weight=1)
         root.rowconfigure(0, weight=0)
         root.rowconfigure(1, weight=1)
@@ -160,11 +161,11 @@ class ImSearch:
 
 
         folders_frame = Frame(root)
-        #folders_frame.columnconfigure(weight=1)
+
         folders_frame.grid(row=0, column=0, sticky="news", columnspan=3)
         folders_frame.rowconfigure(0, weight=1)
         folders_frame.rowconfigure(1, weight=1)
-        folders_frame.rowconfigure(2, weight=1)
+        folders_frame.rowconfigure(2, weight=0)
 
         folders_frame.columnconfigure(0, weight=1)
         folders_frame.columnconfigure(1, weight=5)
@@ -172,10 +173,21 @@ class ImSearch:
 
 
         search_frame = Frame(root)
-        search_frame.grid(row=1, column=1, sticky="new")
+        search_frame.grid(row=1, column=1, sticky="news")
+        search_frame.grid_rowconfigure(1, weight=0)
+        search_frame.grid_columnconfigure(0, weight=1)
+
+
 
         results_frame = Frame(root)
         results_frame.grid(row=2, column=0, sticky="news", columnspan=3)
+
+        # results_frame.rowconfigure(0, weight=1)
+        # results_frame.columnconfigure(0, weight=1)
+
+        results_frame.columnconfigure(0, weight=1)
+        results_frame.columnconfigure(1, weight=0)  # No expansion for scrollbar
+        results_frame.rowconfigure(0, weight=1)
 
 
         self.canvas_uploaded = tk.Canvas(root, bg="white", relief=tk.SUNKEN, borderwidth=1)
@@ -184,8 +196,8 @@ class ImSearch:
         self.canvas_selected = tk.Canvas(root, bg="white", relief=tk.SUNKEN, borderwidth=1)
         #self.canvas_selected.place(x=926, y=96, height=535, width=428)
 
-        self.canvas_uploaded.grid(row=1, column=0, sticky="news")
-        self.canvas_selected.grid(row=1, column=2, sticky="news")
+        self.canvas_uploaded.grid(row=1, column=0, sticky="news", padx=5, pady=5)
+        self.canvas_selected.grid(row=1, column=2, sticky="news", padx=5, pady=5)
 
         self.folders_listbox = tk.Listbox(folders_frame, selectmode=tk.SINGLE)
         #self.folders_listbox.place(x=166, y=10, height=80, width=1034)
@@ -215,10 +227,7 @@ class ImSearch:
         # select image button
         self.upload_image_button = ttk.Button(search_frame, text=self.languages[self.current_language]["upload_image"], command=self.upload_query_image)
         #self.upload_image_button.place(x=496, y=122, height=52, width=374)
-        self.upload_image_button.pack()
-        # selected image label
-        # self.target_image_label = ttk.Label(root, text="Selected Target Image: None")
-        # self.target_image_label.place(x=64, y=720)
+        self.upload_image_button.grid(row=0, column=0, sticky="nw", padx=1, pady=1)
 
         # self.search_mode_label = ttk.Label(search_frame, text=self.languages[self.current_language]["search_mode"])
         # #self.search_mode_label.place(x=496, y=200)
@@ -226,90 +235,51 @@ class ImSearch:
         # self.search_settings_label = ttk.Label(search_frame, text=self.languages[self.current_language]["search_settings"])
         # #self.search_settings_label.place(x=496, y=240)
         # self.search_settings_label.pack()
-        self.similarity_threshold_label = ttk.Label(search_frame, text=self.languages[self.current_language]["similarity_threshold"])
+        #self.similarity_threshold_label = ttk.Label(search_frame, text=self.languages[self.current_language]["similarity_threshold"])
         #self.similarity_threshold_label.place(x=496, y=280)
-        self.similarity_threshold_label.pack()
+        #self.similarity_threshold_label.pack()
+        #self.similarity_threshold_label.grid()
 
-        self.sim = tk.Spinbox(search_frame, from_=0, to=100)
-        # Change default similarity threshold
-        self.sim.delete(0, "end")
-        self.sim.insert(0, "50")
-        self.sim.pack()
+        # self.sim = tk.Spinbox(search_frame, from_=0, to=100)
+        # # Change default similarity threshold
+        # self.sim.delete(0, "end")
+        # self.sim.insert(0, "50")
+        # #self.sim.pack()
+        # self.sim.grid()
 
         #self.sim.place(x=650, y=282, height=20, width=32)
         #tk.Label(search_frame, text="%", fg="black").place(x=682, y=283, height=20, width=10)
-        tk.Label(search_frame, text="%", fg="black").pack()
-
+        #tk.Label(search_frame, text="%", fg="black").pack()
+        #tk.Label(search_frame, text="%", fg="black").grid()
 
         self.search_combobox = ttk.Combobox(search_frame, values=["Vector Similarity", "Histogram Similarity", "Find Duplicates", "Duplicate Pairs", "SSIM Compare", "SIFT Compare"], state="readonly")
         #self.search_combobox.place(x=650, y=192, height=34, width=220)
-        self.search_combobox.pack()
+        #self.search_combobox.pack()
+        #self.search_combobox.grid()
 
         self.search_combobox.current(0)
 
         self.start_search_button = ttk.Button(search_frame, text=self.languages[self.current_language]["start_search"], command=self.run_search)
         #self.start_search_button.place(x=710, y=280, height=34, width=160)
-        self.start_search_button.pack()
+        #self.start_search_button.pack()
+        #self.start_search_button.grid()
 
         self.stop_search_button = ttk.Button(search_frame, text=self.languages[self.current_language]["stop_search"], command=self.stop_search)
         #self.stop_search_button.place(x=710, y=324, height=34, width=160)
-        self.stop_search_button.pack()
+        #self.stop_search_button.pack()
+        #self.stop_search_button.grid()
         self.stop_search_button.config(state=tk.DISABLED)
 
         self.subfolder_button = ttk.Checkbutton(search_frame, text=self.languages[self.current_language]["search_subfolders"], variable=self.subfolders,
                                                 onvalue=1, offvalue=0)
         #self.subfolder_button.place(x=650, y=243)
-        self.subfolder_button.pack()
-
+        #self.subfolder_button.pack()
+        #self.subfolder_button.grid()
         self.reprocess_button = ttk.Button(search_frame, text="Reprocess Folders", command=self.reprocess_folders)
-        self.reprocess_button.pack()
-        # select image button
-        # self.upload_image_button = ttk.Button(root, text=self.languages[self.current_language]["upload_image"],
-        #                                       command=self.upload_query_image)
-        # self.upload_image_button.place(x=496, y=122, height=52, width=374, anchor="w")
-        #
-        # # selected image label
-        # self.target_image_label = ttk.Label(root, text="Selected Target Image: None")
-        # self.target_image_label.place(x=64, y=720, anchor="center")
-        #
-        # self.search_mode_label = ttk.Label(root, text=self.languages[self.current_language]["search_mode"])
-        # self.search_mode_label.place(x=496, y=200, anchor="center")
-        #
-        # self.search_settings_label = ttk.Label(root, text=self.languages[self.current_language]["search_settings"])
-        # self.search_settings_label.place(x=496, y=240, anchor="center")
-        #
-        # self.similarity_threshold_label = ttk.Label(root,
-        #                                             text=self.languages[self.current_language]["similarity_threshold"])
-        # self.similarity_threshold_label.place(x=496, y=280, anchor="center")
-        #
-        # self.sim = tk.Spinbox(self.root, from_=0, to=100)
-        # self.sim.delete(0, "end")
-        # self.sim.insert(0, "50")
-        # self.sim.place(x=650, y=282, height=20, width=32, anchor="center")
-        # tk.Label(self.root, text="%", fg="black").place(x=682, y=283, height=20, width=10, anchor="center")
-        #
-        # self.search_combobox = ttk.Combobox(root, values=["Find Similar", "Find Duplicates", "Duplicate Pairs",
-        #                                                   "SSIM Compare"], state="readonly")
-        # self.search_combobox.place(x=650, y=192, height=34, width=220, anchor="center")
-        # self.search_combobox.current(0)
-        #
-        # self.start_search_button = ttk.Button(root, text=self.languages[self.current_language]["start_search"],
-        #                                       command=self.run_search)
-        # self.start_search_button.place(x=710, y=280, height=34, width=160, anchor="center")
-        #
-        # self.stop_search_button = ttk.Button(self.root, text=self.languages[self.current_language]["stop_search"],
-        #                                      command=self.stop_search)
-        # self.stop_search_button.place(x=710, y=324, height=34, width=160, anchor="center")
-        # self.stop_search_button.config(state=tk.DISABLED)
-        #
-        # self.subfolder_button = ttk.Checkbutton(self.root,
-        #                                         text=self.languages[self.current_language]["search_subfolders"],
-        #                                         variable=self.subfolders,
-        #                                         onvalue=1, offvalue=0)
-        # self.subfolder_button.place(x=650, y=243, anchor="center")
+        #self.reprocess_button.pack()
+        #self.reprocess_button.grid()
 
-
-        tree_frame = Frame(root)
+        #tree_frame = Frame(root)
         #tree_frame.pack(side="right", fill="y", pady=1, padx=1)
         # self.tree.heading("#0", text="Duplicate Group")
         # self.tree.heading("File Path", text="File Path")
@@ -329,57 +299,199 @@ class ImSearch:
         # )
         # self.tree.heading("File 1", text="Primary File")
         # self.tree.heading("File 2", text="Duplicate File")
-        self.tree = ttk.Treeview(results_frame, columns=("path", "similarity"), show="headings", height=8, selectmode="browse")
-        verscrlbar = ttk.Scrollbar(results_frame,
+
+
+        # self.tree = ttk.Treeview(results_frame, columns=("path", "similarity"),
+        #                          show="headings", height=8, selectmode="browse")
+        # self.tree.heading("path", text="Image path")
+        # self.tree.heading("similarity", text="Similarity (%)")
+        # self.tree.column("path", width=400)
+        # self.tree.column("similarity", width=100)
+        #
+        # verscrlbar = ttk.Scrollbar(results_frame, orient="vertical", command=self.tree.yview)
+        # self.tree.configure(yscrollcommand=verscrlbar.set)
+        #
+        # self.tree.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        # verscrlbar.grid(row=0, column=1, sticky="ns", pady=5)
+
+        self.tree_container = ttk.Frame(results_frame)
+        self.tree_container.pack(fill=tk.BOTH, expand=True)
+
+        self.tree = ttk.Treeview(self.tree_container, columns=("path", "similarity"), show="headings",
+                                 selectmode="browse")
+        verscrlbar = ttk.Scrollbar(self.tree_container,
                                    orient="vertical",
                                    command=self.tree.yview)
-        verscrlbar.pack(side="right", fill="y", pady=1, padx=1)
+        verscrlbar.place(in_=self.tree,                   # Relative to Treeview
+                         relx=1.0,                         # Right edge of Treeview
+                         x=-10,                            # Move left 20px
+                         rely=0.5,                         # Start at vertical center
+                         relheight=.99,                    # Half of Treeview height
+                         anchor="center")
+        #verscrlbar.pack(side="right", fill="y", pady=1, padx=1)
         self.tree.configure(yscrollcommand=verscrlbar.set)
         self.tree.heading("path", text="Image path")
         self.tree.heading("similarity", text="Similarity (%)")
         self.tree.column("path")
         self.tree.column("similarity")
-        #self.tree.place(x=0, y=0, height=100, width=1340)
+        # self.tree.place(x=0, y=0, height=100, width=1340)
         self.tree.pack(padx=10, pady=10, fill=tk.BOTH)
+        # tree_frame.place(x=14, y=640, height=100, width=1340)
+        # tree_frame.grid
+        self.tree.bind("<<TreeviewSelect>>", self.display_selected)
+
+
+        #self.tree = ttk.Treeview(results_frame, columns=("path", "similarity"), show="headings", height=8, selectmode="browse")
+        # verscrlbar = ttk.Scrollbar(results_frame,
+        #                            orient="vertical",
+        #                            command=self.tree.yview)
+        #verscrlbar.pack(side="right", fill="y", pady=1, padx=1)
+        #self.tree.configure(yscrollcommand=verscrlbar.set)
+        # self.tree.heading("path", text="Image path")
+        # self.tree.heading("similarity", text="Similarity (%)")
+        # self.tree.column("path")
+        # self.tree.column("similarity")
+        #self.tree.place(x=0, y=0, height=100, width=1340)
+        #self.tree.pack(padx=10, pady=10, fill=tk.BOTH)
         #tree_frame.place(x=14, y=640, height=100, width=1340)
         #tree_frame.grid
-        self.tree.bind("<<TreeviewSelect>>", self.display_selected)
+        #self.tree.bind("<<TreeviewSelect>>", self.display_selected)
 
         # Status Bar with Progress Bar
         self.status = tk.StringVar()
         self.status.set("Ready")
-        self.status_bar = ttk.Label(results_frame, textvariable=self.status, relief=tk.SUNKEN, anchor='w')
-        #self.status_bar.place(x=0, y=748, height=20, width=1366)
+        self.status_bar = ttk.Label(results_frame, textvariable=self.status,
+                                    relief=tk.SUNKEN, anchor='w')
+        #self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5)
         self.status_bar.pack(fill=tk.BOTH)
 
-        self.progress = ttk.Progressbar(results_frame, orient="horizontal", length=100, mode="determinate")
-        #self.progress.place(x=1216, y=750, height=17, width=148)
+        self.progress = ttk.Progressbar(results_frame, orient="horizontal",
+                                        length=100, mode="determinate")
+        #self.progress.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         self.progress.pack(fill=tk.BOTH)
 
         # Save and Load Buttons
         self.save_button = ttk.Button(search_frame, text="Save Results", command=self.save_results)
         #self.save_button.place(x=708, y=500, height=40, width=100)
-        self.save_button.pack()
+        #self.save_button.pack()
+        self.save_button.grid()
 
         self.load_button = ttk.Button(search_frame, text="Load Results", command=self.load_results)
         #self.load_button.place(x=604, y=500, height=40, width=100)
-        self.load_button.pack()
+        #self.load_button.pack()
+        self.load_button.grid()
 
         self.show_images_button = ttk.Button(search_frame, text="Show in full size", command=self.show_images)
         #self.show_images_button.place(x=496, y=440, height=40, width=374)
-        self.show_images_button.pack()
+        #self.show_images_button.pack()
+        self.show_images_button.grid()
 
         self.open_in_explorer_button = ttk.Button(search_frame, text="Open in Explorer", command=self.open_in_explorer)
         #self.open_in_explorer_button.place(x=540, y=584, height=34, width=120)
-        self.open_in_explorer_button.pack()
+        #self.open_in_explorer_button.pack()
+        self.open_in_explorer_button.grid()
 
         self.delete_selected_button = ttk.Button(search_frame, text=self.languages[self.current_language]["delete_selected"], command=self.delete_selected)
         #self.delete_selected_button.place(x=700, y=584, height=34, width=120)
-        self.delete_selected_button.pack()
+        #self.delete_selected_button.pack()
+        self.delete_selected_button.grid()
+
+        search_frame.grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
+        search_frame.columnconfigure(1, weight=1)
+        search_frame.rowconfigure(7, weight=1)  # For expanding space
+
+        # Row 0: Query Image
+        self.upload_image_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+
+        # Row 1: Search Mode
+        ttk.Label(search_frame, text=self.languages[self.current_language]["search_mode"] + ":").grid(
+            row=1, column=0, sticky="w", padx=(0, 5))
+        self.search_combobox.grid(row=1, column=1, sticky="ew", pady=2)
+
+        # Row 2: Similarity Threshold
+        ttk.Label(search_frame, text=self.languages[self.current_language]["similarity_threshold"] + ":").grid(
+            row=2, column=0, sticky="w", padx=(0, 5), pady=2)
+
+        # Create a container frame for spinbox and percentage label
+        sim_frame = ttk.Frame(search_frame)
+        sim_frame.grid(row=2, column=1, sticky="ew", pady=2)
+
+        # Configure columns in the sim_frame
+        sim_frame.columnconfigure(0, weight=0)  # Don't expand spinbox column
+        sim_frame.columnconfigure(1, weight=0)  # Fixed width for percentage
+
+        self.sim = tk.Spinbox(sim_frame, from_=0, to=100, width=8, justify='center')  # Increased width
+        self.sim.grid(row=0, column=0, sticky="e", padx=(0, 2))  # Right-aligned with small padding
+        self.sim.delete(0, "end")
+        self.sim.insert(0, "50")
+
+        ttk.Label(sim_frame, text="%").grid(row=0, column=1, sticky="w", padx=(2, 0))
+
+        # Row 3: Subfolders Checkbutton
+        self.subfolder_button.grid(row=3, column=0, columnspan=2, sticky="w", pady=5)
+
+        # Row 4: Search Buttons
+        self.start_search_button.grid(row=4, column=0, sticky="ew", padx=2, pady=2)
+        self.stop_search_button.grid(row=4, column=1, sticky="ew", padx=2, pady=2)
+
+        # Row 5: File Operations
+        self.show_images_button.grid(row=5, column=0, sticky="ew", padx=2, pady=2)
+        self.open_in_explorer_button.grid(row=5, column=1, sticky="ew", padx=2, pady=2)
+
+        # Row 6: Additional Actions
+        self.reprocess_button.grid(row=6, column=0, sticky="ew", padx=2, pady=2)
+        self.save_button.grid(row=6, column=1, sticky="ew", padx=2, pady=2)
+        self.load_button.grid(row=7, column=0, sticky="ew", padx=2, pady=2)
+        self.delete_selected_button.grid(row=7, column=1, sticky="ew", padx=2, pady=2)
+
+        # Configure column weights
+        search_frame.columnconfigure(0, weight=1)
+        search_frame.columnconfigure(1, weight=1)
+
+        # Uniform padding
+        for child in search_frame.winfo_children():
+            child.grid_configure(padx=5, pady=3)
+
+        self.search_combobox.configure(width=20)
+        self.subfolder_button.configure(padding=5)
+
+        search_frame.grid_columnconfigure(0, weight=1, minsize=300)
+        # row = 0
+        # self.upload_image_button.grid(row=row, column=0, sticky="ew", pady=2);
+        # row += 1
+        # self.search_combobox.grid(row=row, column=0, sticky="ew", pady=2);
+        # row += 1
+        # self.subfolder_button.grid(row=row, column=0, sticky="w", pady=2);
+        # row += 1
+        # self.similarity_threshold_label.grid(row=row, column=0, sticky="w", pady=2)
+        # self.sim.grid(row=row, column=0, sticky="e", pady=2);
+        # row += 1
+        # self.start_search_button.grid(row=row, column=0, sticky="ew", pady=2);
+        # row += 1
+        # self.stop_search_button.grid(row=row, column=0, sticky="ew", pady=2);
+        # row += 1
+        # self.reprocess_button.grid(row=row, column=0, sticky="ew", pady=2);
+        # row += 1
+        # self.open_in_explorer_button.grid(row=row, column=0, sticky="ew", pady=2);
+        # row += 1
+        # self.delete_selected_button.grid(row=row, column=0, sticky="ew", pady=2);
+        # row += 1
+
 
         # Add processing control variables
         self.processing_flag = threading.Event()
         self.current_processing_thread = None
+
+    #     root.bind("<Configure>", self._on_window_resize)
+    #
+    # def _on_window_resize(self, event):
+    #     """Handle window resizing to maintain minimum dimensions"""
+    #     if event.widget == self.root:
+    #         # Enforce minimum size
+    #         if event.width < 1000:
+    #             self.root.geometry(f"1000x{event.height}")
+    #         if event.height < 600:
+    #             self.root.geometry(f"{event.width}x600")
 
     def reset_ui(self):
         self.progress["value"] = 0
