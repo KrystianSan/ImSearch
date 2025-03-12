@@ -9,9 +9,15 @@ from tkinter import filedialog, messagebox, ttk, simpledialog, Menu
 import pandas as pd
 import threading
 import numpy as np
+import ttkthemes
+from CTkListbox import CTkListbox
 from PIL import Image, ImageTk, UnidentifiedImageError
 from skimage.metrics import structural_similarity
 import csv
+import customtkinter
+from customtkinter import CTk, CTkFrame, CTkButton, CTkLabel, CTkEntry, CTkScrollbar, CTkComboBox, CTkCheckBox, StringVar, IntVar, CTkProgressBar
+
+import darkdetect
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -21,6 +27,7 @@ import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms as transforms
 from torchvision.models import ResNet18_Weights
+
 
 
 def calculate_image_hash(image_path):
@@ -75,8 +82,8 @@ class FeatureExtractor:
 
 class ImSearch:
     def __init__(self, root):
-        self.subfolders = tk.IntVar()
-        self.time = tk.IntVar()
+        self.subfolders = IntVar()
+        self.time = IntVar()
         self.stop_search_flag = threading.Event()
         self.search_thread = None
 
@@ -90,6 +97,17 @@ class ImSearch:
         root.rowconfigure(0, weight=0)
         root.rowconfigure(1, weight=1)
         root.rowconfigure(2, weight=0)
+
+        #style = ttkthemes.ThemedStyle()  # do this
+
+        #style.theme_use('breeze')
+
+        # if darkdetect.theme() == "Dark":
+        #     customtkinter.set_appearance_mode("Light")
+        # else:
+        customtkinter.set_appearance_mode(darkdetect.theme())
+        customtkinter.set_default_color_theme("dark-blue")
+
 
         self.folder_count = 0
         self.folder_path = None
@@ -160,7 +178,7 @@ class ImSearch:
         settings_menu.add_cascade(label=self.languages[self.current_language]["language"], menu=language_menu)
 
 
-        folders_frame = Frame(root)
+        folders_frame = CTkFrame(root)
 
         folders_frame.grid(row=0, column=0, sticky="news", columnspan=3)
         folders_frame.rowconfigure(0, weight=1)
@@ -172,14 +190,14 @@ class ImSearch:
         folders_frame.columnconfigure(2, weight=1)
 
 
-        search_frame = Frame(root)
+        search_frame = CTkFrame(root)
         search_frame.grid(row=1, column=1, sticky="news")
         search_frame.grid_rowconfigure(1, weight=0)
         search_frame.grid_columnconfigure(0, weight=1)
 
 
 
-        results_frame = Frame(root)
+        results_frame = CTkFrame(root)
         results_frame.grid(row=2, column=0, sticky="news", columnspan=3)
 
         # results_frame.rowconfigure(0, weight=1)
@@ -196,36 +214,37 @@ class ImSearch:
         self.canvas_selected = tk.Canvas(root, bg="white", relief=tk.SUNKEN, borderwidth=1)
         #self.canvas_selected.place(x=926, y=96, height=535, width=428)
 
-        self.canvas_uploaded.grid(row=1, column=0, sticky="news", padx=5, pady=5)
-        self.canvas_selected.grid(row=1, column=2, sticky="news", padx=5, pady=5)
+        self.canvas_uploaded.grid(row=1, column=0, sticky="news", padx=6, pady=6)
+        self.canvas_selected.grid(row=1, column=2, sticky="news", padx=6, pady=6)
 
         self.folders_listbox = tk.Listbox(folders_frame, selectmode=tk.SINGLE)
+        self.folders_listbox.configure(background="black", fg="white")
         #self.folders_listbox.place(x=166, y=10, height=80, width=1034)
         self.folders_listbox.grid(row=0, column=1, sticky="nsew", padx=5, pady=5, rowspan=2)
 
         # folder button
-        self.add_folder_button = ttk.Button(folders_frame, text=self.languages[self.current_language]["add_folder"],
+        self.add_folder_button = CTkButton(folders_frame, text=self.languages[self.current_language]["add_folder"],
                                             command=self.add_folder)
         #self.add_folder_button.place(x=1212, y=50, height=40, width=140)
         self.add_folder_button.grid(row=1, column=2, sticky="nsew", padx=5, pady=5)
 
-        self.remove_folder_button = ttk.Button(folders_frame, text=self.languages[self.current_language]["remove_folder"],
+        self.remove_folder_button = CTkButton(folders_frame, text=self.languages[self.current_language]["remove_folder"],
                                                command=self.remove_folder)
         #self.remove_folder_button.place(x=1212, y=10, height=40, width=140)
         self.remove_folder_button.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
 
-        self.folder_up_button = ttk.Button(folders_frame, text=self.languages[self.current_language]["folder_up"],
+        self.folder_up_button = CTkButton(folders_frame, text=self.languages[self.current_language]["folder_up"],
                                            command=self.move_up)
         #self.folder_up_button.place(x=14, y=10, height=40, width=140)
         self.folder_up_button.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
 
-        self.folder_down_button = ttk.Button(folders_frame, text=self.languages[self.current_language]["folder_down"],
+        self.folder_down_button = CTkButton(folders_frame, text=self.languages[self.current_language]["folder_down"],
                                              command=self.move_down)
         #self.folder_down_button.place(x=14, y=50, height=40, width=140)
         self.folder_down_button.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
         # select image button
-        self.upload_image_button = ttk.Button(search_frame, text=self.languages[self.current_language]["upload_image"], command=self.upload_query_image)
+        self.upload_image_button = CTkButton(search_frame, text=self.languages[self.current_language]["upload_image"], command=self.upload_query_image)
         #self.upload_image_button.place(x=496, y=122, height=52, width=374)
         self.upload_image_button.grid(row=0, column=0, sticky="nw", padx=1, pady=1)
 
@@ -252,30 +271,30 @@ class ImSearch:
         #tk.Label(search_frame, text="%", fg="black").pack()
         #tk.Label(search_frame, text="%", fg="black").grid()
 
-        self.search_combobox = ttk.Combobox(search_frame, values=["Vector Similarity", "Histogram Similarity", "Find Duplicates", "Duplicate Pairs", "SSIM Compare", "SIFT Compare"], state="readonly")
+        self.search_combobox = CTkComboBox(search_frame, values=["Vector Similarity", "Histogram Similarity", "Find Duplicates", "Duplicate Pairs", "SSIM Compare", "SIFT Compare"], state="readonly")
         #self.search_combobox.place(x=650, y=192, height=34, width=220)
         #self.search_combobox.pack()
         #self.search_combobox.grid()
 
-        self.search_combobox.current(0)
+        #self.search_combobox.current(0)
 
-        self.start_search_button = ttk.Button(search_frame, text=self.languages[self.current_language]["start_search"], command=self.run_search)
+        self.start_search_button = CTkButton(search_frame, text=self.languages[self.current_language]["start_search"], command=self.run_search)
         #self.start_search_button.place(x=710, y=280, height=34, width=160)
         #self.start_search_button.pack()
         #self.start_search_button.grid()
 
-        self.stop_search_button = ttk.Button(search_frame, text=self.languages[self.current_language]["stop_search"], command=self.stop_search)
+        self.stop_search_button = CTkButton(search_frame, text=self.languages[self.current_language]["stop_search"], command=self.stop_search)
         #self.stop_search_button.place(x=710, y=324, height=34, width=160)
         #self.stop_search_button.pack()
         #self.stop_search_button.grid()
-        self.stop_search_button.config(state=tk.DISABLED)
+        self.stop_search_button.configure(state=tk.DISABLED)
 
-        self.subfolder_button = ttk.Checkbutton(search_frame, text=self.languages[self.current_language]["search_subfolders"], variable=self.subfolders,
+        self.subfolder_button = CTkCheckBox(search_frame, text=self.languages[self.current_language]["search_subfolders"], variable=self.subfolders,
                                                 onvalue=1, offvalue=0)
         #self.subfolder_button.place(x=650, y=243)
         #self.subfolder_button.pack()
         #self.subfolder_button.grid()
-        self.reprocess_button = ttk.Button(search_frame, text="Reprocess Folders", command=self.reprocess_folders)
+        self.reprocess_button = CTkButton(search_frame, text="Reprocess Folders", command=self.reprocess_folders)
         #self.reprocess_button.pack()
         #self.reprocess_button.grid()
 
@@ -314,20 +333,20 @@ class ImSearch:
         # self.tree.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         # verscrlbar.grid(row=0, column=1, sticky="ns", pady=5)
 
-        self.tree_container = ttk.Frame(results_frame)
+        self.tree_container = CTkFrame(results_frame)
         self.tree_container.pack(fill=tk.BOTH, expand=True)
 
         self.tree = ttk.Treeview(self.tree_container, columns=("path", "similarity"), show="headings",
                                  selectmode="browse")
-        verscrlbar = ttk.Scrollbar(self.tree_container,
-                                   orient="vertical",
+        verscrlbar = CTkScrollbar(self.tree_container,
+                                   orientation="vertical",
                                    command=self.tree.yview)
         verscrlbar.place(in_=self.tree,                   # Relative to Treeview
                          relx=1.0,                         # Right edge of Treeview
-                         x=-10,                            # Move left 20px
-                         rely=0.5,                         # Start at vertical center
-                         relheight=.99,                    # Half of Treeview height
-                         anchor="center")
+                         x=-8,                            # Move left 20px
+                         rely=.08,                         # Start at vertical center
+                         relheight=.92,                    # Half of Treeview height
+                         anchor="n")
         #verscrlbar.pack(side="right", fill="y", pady=1, padx=1)
         self.tree.configure(yscrollcommand=verscrlbar.set)
         self.tree.heading("path", text="Image path")
@@ -335,7 +354,7 @@ class ImSearch:
         self.tree.column("path")
         self.tree.column("similarity")
         # self.tree.place(x=0, y=0, height=100, width=1340)
-        self.tree.pack(padx=10, pady=10, fill=tk.BOTH)
+        self.tree.pack(padx=6, pady=6, fill=tk.BOTH)
         # tree_frame.place(x=14, y=640, height=100, width=1340)
         # tree_frame.grid
         self.tree.bind("<<TreeviewSelect>>", self.display_selected)
@@ -357,41 +376,54 @@ class ImSearch:
         #tree_frame.grid
         #self.tree.bind("<<TreeviewSelect>>", self.display_selected)
 
+        bg_color = root._apply_appearance_mode(customtkinter.ThemeManager.theme["CTkFrame"]["fg_color"])
+        text_color = root._apply_appearance_mode(customtkinter.ThemeManager.theme["CTkLabel"]["text_color"])
+        selected_color = root._apply_appearance_mode(customtkinter.ThemeManager.theme["CTkButton"]["fg_color"])
+
+        treestyle = ttk.Style()
+        treestyle.theme_use('default')
+        treestyle.configure("Treeview", background=bg_color, foreground=text_color, fieldbackground=bg_color,
+                            borderwidth=0)
+        treestyle.map('Treeview', background=[('selected', bg_color)], foreground=[('selected', selected_color)])
+        root.bind("<<TreeviewSelect>>", lambda event: root.focus_set())
+
         # Status Bar with Progress Bar
         self.status = tk.StringVar()
         self.status.set("Ready")
-        self.status_bar = ttk.Label(results_frame, textvariable=self.status,
-                                    relief=tk.SUNKEN, anchor='w')
+        self.status_bar = CTkLabel(results_frame, textvariable=self.status,
+                                   # relief=tk.SUNKEN,
+                                   anchor='w')
         #self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5)
         self.status_bar.pack(fill=tk.BOTH)
 
-        self.progress = ttk.Progressbar(results_frame, orient="horizontal",
-                                        length=100, mode="determinate")
+        self.progress = CTkProgressBar(results_frame, orientation="horizontal",
+                                       # width=100,
+                                       mode="determinate")
         #self.progress.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         self.progress.pack(fill=tk.BOTH)
 
         # Save and Load Buttons
-        self.save_button = ttk.Button(search_frame, text="Save Results", command=self.save_results)
+        self.save_button = CTkButton(search_frame, text="Save Results", command=self.save_results)
         #self.save_button.place(x=708, y=500, height=40, width=100)
         #self.save_button.pack()
         self.save_button.grid()
 
-        self.load_button = ttk.Button(search_frame, text="Load Results", command=self.load_results)
+        self.load_button = CTkButton(search_frame, text="Load Results", command=self.load_results)
         #self.load_button.place(x=604, y=500, height=40, width=100)
         #self.load_button.pack()
         self.load_button.grid()
 
-        self.show_images_button = ttk.Button(search_frame, text="Show in full size", command=self.show_images)
+        self.show_images_button = CTkButton(search_frame, text="Show in full size", command=self.show_images)
         #self.show_images_button.place(x=496, y=440, height=40, width=374)
         #self.show_images_button.pack()
         self.show_images_button.grid()
 
-        self.open_in_explorer_button = ttk.Button(search_frame, text="Open in Explorer", command=self.open_in_explorer)
+        self.open_in_explorer_button = CTkButton(search_frame, text="Open in Explorer", command=self.open_in_explorer)
         #self.open_in_explorer_button.place(x=540, y=584, height=34, width=120)
         #self.open_in_explorer_button.pack()
         self.open_in_explorer_button.grid()
 
-        self.delete_selected_button = ttk.Button(search_frame, text=self.languages[self.current_language]["delete_selected"], command=self.delete_selected)
+        self.delete_selected_button = CTkButton(search_frame, text=self.languages[self.current_language]["delete_selected"], command=self.delete_selected)
         #self.delete_selected_button.place(x=700, y=584, height=34, width=120)
         #self.delete_selected_button.pack()
         self.delete_selected_button.grid()
@@ -404,16 +436,17 @@ class ImSearch:
         self.upload_image_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
         # Row 1: Search Mode
-        ttk.Label(search_frame, text=self.languages[self.current_language]["search_mode"] + ":").grid(
+        CTkLabel(search_frame, text=self.languages[self.current_language]["search_mode"] + ":").grid(
             row=1, column=0, sticky="w", padx=(0, 5))
         self.search_combobox.grid(row=1, column=1, sticky="ew", pady=2)
+        self.search_combobox.set("Vector Similarity")
 
         # Row 2: Similarity Threshold
-        ttk.Label(search_frame, text=self.languages[self.current_language]["similarity_threshold"] + ":").grid(
+        CTkLabel(search_frame, text=self.languages[self.current_language]["similarity_threshold"] + ":").grid(
             row=2, column=0, sticky="w", padx=(0, 5), pady=2)
 
         # Create a container frame for spinbox and percentage label
-        sim_frame = ttk.Frame(search_frame)
+        sim_frame = CTkFrame(search_frame, fg_color=bg_color)
         sim_frame.grid(row=2, column=1, sticky="ew", pady=2)
 
         # Configure columns in the sim_frame
@@ -425,7 +458,7 @@ class ImSearch:
         self.sim.delete(0, "end")
         self.sim.insert(0, "50")
 
-        ttk.Label(sim_frame, text="%").grid(row=0, column=1, sticky="w", padx=(2, 0))
+        CTkLabel(sim_frame, text="%").grid(row=0, column=1, sticky="w", padx=(2, 0))
 
         # Row 3: Subfolders Checkbutton
         self.subfolder_button.grid(row=3, column=0, columnspan=2, sticky="w", pady=5)
@@ -453,7 +486,7 @@ class ImSearch:
             child.grid_configure(padx=5, pady=3)
 
         self.search_combobox.configure(width=20)
-        self.subfolder_button.configure(padding=5)
+        #self.subfolder_button.configure(padding=5)
 
         search_frame.grid_columnconfigure(0, weight=1, minsize=300)
         # row = 0
@@ -494,7 +527,7 @@ class ImSearch:
     #             self.root.geometry(f"{event.width}x600")
 
     def reset_ui(self):
-        self.progress["value"] = 0
+        self.progress.set(0)
         self.stop_search_flag.clear()
 
     def upload_query_image(self):
@@ -748,9 +781,9 @@ class ImSearch:
             # Get files from all added folders once
             self.files_list = self.list_files(self.added_folders, include_subfolders)
             total_files = len(self.files_list)
-            self.progress["maximum"] = total_files
+            self.progress.set(total_files)
             search_type = self.search_combobox.get()
-            self.stop_search_button.config(state=tk.NORMAL)
+            self.stop_search_button.configure(state=tk.NORMAL)
 
             # Assign all search threads to self.search_thread
             if search_type == "Vector Similarity":
@@ -952,12 +985,12 @@ class ImSearch:
 
     def _update_progress_max(self, total):
         """Thread-safe progress max setup"""
-        self.progress["maximum"] = total
+        self.progress.set(total)
         self.status.set("Starting folder processing...")
 
     def _update_progress(self, current, total):
         """Thread-safe progress update"""
-        self.progress["value"] = current
+        self.progress.set(current)
         self.status.set(f"Processed {current}/{total} folders")
 
     def _finalize_processing(self):
@@ -965,7 +998,7 @@ class ImSearch:
         self.status.set("Folder processing completed"
                         if not self.processing_flag.is_set()
                         else "Processing interrupted")
-        self.progress["value"] = 0
+        self.progress.set(0)
         self.processing_flag.clear()
 
     def start_folder_processing(self):
@@ -1011,7 +1044,7 @@ class ImSearch:
 
         self.status.set(f"Found {len(results)} matches in {elapsed_time:.2f}s")
         self.progress["value"] = 0
-        self.stop_search_button.config(state=tk.DISABLED)
+        self.stop_search_button.configure(state=tk.DISABLED)
 
     def vector_search(self):
         """Entry point with explicit folder order"""
@@ -1052,7 +1085,7 @@ class ImSearch:
                 args=(vector_files, query_vector),
                 daemon=True
             )
-            self.stop_search_button.config(state=tk.NORMAL)
+            self.stop_search_button.configure(state=tk.NORMAL)
             self.search_thread.start()
 
         except Exception as e:
@@ -1137,7 +1170,7 @@ class ImSearch:
                 if similarity >= int(self.sim.get()):
                     self.tree.insert("", tk.END, values=(file, f"{similarity:.2f}"))
                     files_found += 1
-            self.progress["value"] = count
+            self.progress.set(count)
             self.root.update_idletasks()
         else:
             self.status.set(f"Completed. {analyzed_files_count} files analyzed")
@@ -1146,13 +1179,13 @@ class ImSearch:
         elapsed_time = end_time - start_time
         if analyzed_files_count != 0:
             self.status.set(f"Completed in {elapsed_time:.2f} seconds, {analyzed_files_count} files analyzed, {files_found} similar images found")
-            self.progress["value"] = 0
+            self.progress.set(0)
         else:
             messagebox.showinfo("Error", f"No image files found in selected folders. Try ticking the \"Search subfolders\" option")
-            self.progress["value"] = 0
+            self.progress.set(0)
 
         self.reset_ui()
-        self.stop_search_button.config(state=tk.DISABLED)
+        self.stop_search_button.configure(state=tk.DISABLED)
 
         self.search_thread = None
 
@@ -1243,7 +1276,7 @@ class ImSearch:
         elapsed_time = time.time() - start_time
         self.status.set(f"Found {self.tree.get_children().__len__()} duplicates in {elapsed_time:.1f}s")
         self.progress["value"] = 0
-        self.stop_search_button.config(state=tk.DISABLED)
+        self.stop_search_button.configure(state=tk.DISABLED)
 
         self.search_thread = None
 
@@ -1287,7 +1320,7 @@ class ImSearch:
 
                     processed += 1
                     if processed % 100 == 0:
-                        self.progress["value"] = processed
+                        self.progress.set(processed)
                         self.status.set(f"Processed {processed}/{len(files)} files")
                         self.root.update_idletasks()
 
@@ -1315,8 +1348,8 @@ class ImSearch:
 
         elapsed_time = time.time() - start_time
         self.status.set(f"Found {len(hash_groups)} groups in {elapsed_time:.2f}s")
-        self.progress['value'] = 0
-        self.stop_search_button.config(state=tk.DISABLED)
+        self.progress.set(0)
+        self.stop_search_button.configure(state=tk.DISABLED)
 
         self.search_thread = None
 
@@ -1419,7 +1452,7 @@ class ImSearch:
         )
         self.status.set(status_message)
         self.progress["value"] = 0
-        self.stop_search_button.config(state=tk.DISABLED)
+        self.stop_search_button.configure(state=tk.DISABLED)
         self.stop_search_flag.clear()
         self.search_thread = None
 
@@ -1502,7 +1535,7 @@ class ImSearch:
                 self.status.set(
                     f"SIFT compare {stop_status} in {elapsed_time:.2f}s - Processed {processed_count} files")
                 self.progress["value"] = 0
-                self.stop_search_button.config(state=tk.DISABLED)
+                self.stop_search_button.configure(state=tk.DISABLED)
                 self.stop_search_flag.clear()
                 self.search_thread = None
 
@@ -1578,7 +1611,7 @@ class ImSearch:
             self.progress["value"] = 0
 
         self.reset_ui()
-        self.stop_search_button.config(state=tk.DISABLED)
+        self.stop_search_button.configure(state=tk.DISABLED)
 
         self.search_thread = None
 
@@ -1745,18 +1778,18 @@ class ImSearch:
         self.current_language = language
 
         # Update all UI elements with new language text
-        self.add_folder_button.config(text=self.languages[language]["add_folder"])
-        self.remove_folder_button.config(text=self.languages[language]["remove_folder"])
-        self.folder_up_button.config(text=self.languages[language]["folder_up"])
-        self.folder_down_button.config(text=self.languages[language]["folder_down"])
-        self.upload_image_button.config(text=self.languages[language]["upload_image"])
-        self.search_mode_label.config(text=self.languages[language]["search_mode"])
-        self.search_settings_label.config(text=self.languages[language]["search_settings"])
-        self.similarity_threshold_label.config(text=self.languages[language]["similarity_threshold"])
-        self.delete_selected_button.config(text=self.languages[language]["delete_selected"])
-        self.subfolder_button.config(text=self.languages[language]["search_subfolders"])
-        self.start_search_button.config(text=self.languages[language]["start_search"])
-        self.stop_search_button.config(text=self.languages[language]["stop_search"])
+        self.add_folder_button.configure(text=self.languages[language]["add_folder"])
+        self.remove_folder_button.configure(text=self.languages[language]["remove_folder"])
+        self.folder_up_button.configure(text=self.languages[language]["folder_up"])
+        self.folder_down_button.configure(text=self.languages[language]["folder_down"])
+        self.upload_image_button.configure(text=self.languages[language]["upload_image"])
+        self.search_mode_label.configure(text=self.languages[language]["search_mode"])
+        self.search_settings_label.configure(text=self.languages[language]["search_settings"])
+        self.similarity_threshold_label.configure(text=self.languages[language]["similarity_threshold"])
+        self.delete_selected_button.configure(text=self.languages[language]["delete_selected"])
+        self.subfolder_button.configure(text=self.languages[language]["search_subfolders"])
+        self.start_search_button.configure(text=self.languages[language]["start_search"])
+        self.stop_search_button.configure(text=self.languages[language]["stop_search"])
 
         # Update language menu label
         menubar = self.root.winfo_toplevel().config(menu=None)
@@ -1810,7 +1843,7 @@ def findSimilar5(self, img_path, folder_path, method):
 if __name__ == "__main__":
     match len(sys.argv):
         case 1:
-            root = tk.Tk()
+            root = customtkinter.CTk()
             app = ImSearch(root)
             root.mainloop()
         case 4:
