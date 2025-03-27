@@ -208,17 +208,16 @@ class ImSearch:
         results_frame.rowconfigure(0, weight=1)
 
 
-        self.canvas_uploaded = tk.Canvas(root, bg="white", relief=tk.SUNKEN, borderwidth=1)
+        self.canvas_uploaded = tk.Canvas(root, bg="gray13", highlightthickness=2, highlightbackground="gray28")
         #self.canvas_uploaded.place(x=12, y=96, height=535, width=428)
 
-        self.canvas_selected = tk.Canvas(root, bg="white", relief=tk.SUNKEN, borderwidth=1)
+        self.canvas_selected = tk.Canvas(root, bg="gray13", highlightthickness=2, highlightbackground="gray28")
         #self.canvas_selected.place(x=926, y=96, height=535, width=428)
 
         self.canvas_uploaded.grid(row=1, column=0, sticky="news", padx=6, pady=6)
         self.canvas_selected.grid(row=1, column=2, sticky="news", padx=6, pady=6)
 
-        self.folders_listbox = tk.Listbox(folders_frame, selectmode=tk.SINGLE)
-        self.folders_listbox.configure(background="black", fg="white")
+        self.folders_listbox = CTkListbox(folders_frame, border_width=2)#, selectmode=tk.SINGLE)
         #self.folders_listbox.place(x=166, y=10, height=80, width=1034)
         self.folders_listbox.grid(row=0, column=1, sticky="nsew", padx=5, pady=5, rowspan=2)
 
@@ -248,24 +247,6 @@ class ImSearch:
         #self.upload_image_button.place(x=496, y=122, height=52, width=374)
         self.upload_image_button.grid(row=0, column=0, sticky="nw", padx=1, pady=1)
 
-        # self.search_mode_label = ttk.Label(search_frame, text=self.languages[self.current_language]["search_mode"])
-        # #self.search_mode_label.place(x=496, y=200)
-        # self.search_mode_label.pack()
-        # self.search_settings_label = ttk.Label(search_frame, text=self.languages[self.current_language]["search_settings"])
-        # #self.search_settings_label.place(x=496, y=240)
-        # self.search_settings_label.pack()
-        #self.similarity_threshold_label = ttk.Label(search_frame, text=self.languages[self.current_language]["similarity_threshold"])
-        #self.similarity_threshold_label.place(x=496, y=280)
-        #self.similarity_threshold_label.pack()
-        #self.similarity_threshold_label.grid()
-
-        # self.sim = tk.Spinbox(search_frame, from_=0, to=100)
-        # # Change default similarity threshold
-        # self.sim.delete(0, "end")
-        # self.sim.insert(0, "50")
-        # #self.sim.pack()
-        # self.sim.grid()
-
         #self.sim.place(x=650, y=282, height=20, width=32)
         #tk.Label(search_frame, text="%", fg="black").place(x=682, y=283, height=20, width=10)
         #tk.Label(search_frame, text="%", fg="black").pack()
@@ -294,7 +275,7 @@ class ImSearch:
         #self.subfolder_button.place(x=650, y=243)
         #self.subfolder_button.pack()
         #self.subfolder_button.grid()
-        self.reprocess_button = CTkButton(search_frame, text="Reprocess Folders", command=self.reprocess_folders)
+        self.process_button = CTkButton(search_frame, text="Process Folders", command=self.process_folders)
         #self.reprocess_button.pack()
         #self.reprocess_button.grid()
 
@@ -396,7 +377,9 @@ class ImSearch:
         #self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5)
         self.status_bar.pack(fill=tk.BOTH)
 
-        self.progress = CTkProgressBar(results_frame, orientation="horizontal",
+        #Style.configure('TProgressbar', thickness=10, pbarrelief='flat')
+
+        self.progress = ttk.Progressbar(results_frame, orient="horizontal", #style='TProgressbar',
                                        # width=100,
                                        mode="determinate")
         #self.progress.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
@@ -430,7 +413,7 @@ class ImSearch:
 
         search_frame.grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
         search_frame.columnconfigure(1, weight=1)
-        search_frame.rowconfigure(7, weight=1)  # For expanding space
+        search_frame.rowconfigure(8, weight=1)  # For expanding space
 
         # Row 0: Query Image
         self.upload_image_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
@@ -472,7 +455,7 @@ class ImSearch:
         self.open_in_explorer_button.grid(row=5, column=1, sticky="ew", padx=2, pady=2)
 
         # Row 6: Additional Actions
-        self.reprocess_button.grid(row=6, column=0, sticky="ew", padx=2, pady=2)
+        self.process_button.grid(row=6, column=0, sticky="ew", padx=2, pady=2)
         self.save_button.grid(row=6, column=1, sticky="ew", padx=2, pady=2)
         self.load_button.grid(row=7, column=0, sticky="ew", padx=2, pady=2)
         self.delete_selected_button.grid(row=7, column=1, sticky="ew", padx=2, pady=2)
@@ -488,7 +471,7 @@ class ImSearch:
         self.search_combobox.configure(width=20)
         #self.subfolder_button.configure(padding=5)
 
-        search_frame.grid_columnconfigure(0, weight=1, minsize=300)
+        search_frame.grid_columnconfigure(0, weight=1, minsize=160)
         # row = 0
         # self.upload_image_button.grid(row=row, column=0, sticky="ew", pady=2);
         # row += 1
@@ -527,7 +510,7 @@ class ImSearch:
     #             self.root.geometry(f"{event.width}x600")
 
     def reset_ui(self):
-        self.progress.set(0)
+        self.progress["value"] = 0
         self.stop_search_flag.clear()
 
     def upload_query_image(self):
@@ -560,37 +543,39 @@ class ImSearch:
 
     def remove_folder(self):
         selected_folder_name = self.folders_listbox.get(self.folders_listbox.curselection())
-        selected_folder_index = self.folders_listbox.get(0, tk.END).index(selected_folder_name)
+        selected_folder_index = self.folders_listbox.curselection()
         if selected_folder_name:
             self.folders_listbox.delete(selected_folder_index)
             self.folder_path = None
             self.added_folders.remove(selected_folder_name)
 
     def move_up(self):
-        selected_index = self.folders_listbox.curselection()
-        if selected_index and selected_index[0] > 0:
-            idx = selected_index[0]
-            # Swap in listbox
-            self.folders_listbox.insert(idx - 1, self.folders_listbox.get(idx))
-            self.folders_listbox.delete(idx + 1)
-            # Swap in data storage
+        idx = self.folders_listbox.curselection()
+        #and selected_index[0]
+        if idx > 0:
+            self.folders_listbox.move_up(idx)
+            # # Swap in listbox
+            # self.folders_listbox.insert(idx - 1, self.folders_listbox.get(idx))
+            # self.folders_listbox.delete(idx + 1)
+            # # Swap in data storage
             self.added_folders.insert(idx - 1, self.added_folders.pop(idx))
-            # Maintain selection
-            self.folders_listbox.selection_clear(0, tk.END)
-            self.folders_listbox.selection_set(idx - 1)
+            # # Maintain selection
+            # self.folders_listbox.selection_clear(0, tk.END)
+            # self.folders_listbox.selection_set(idx - 1)
 
     def move_down(self):
-        selected_index = self.folders_listbox.curselection()
-        if selected_index and selected_index[0] < self.folders_listbox.size() - 1:
-            idx = selected_index[0]
-            # Swap in listbox
-            self.folders_listbox.insert(idx + 2, self.folders_listbox.get(idx))
-            self.folders_listbox.delete(idx)
-            # Swap in data storage
+        idx = self.folders_listbox.curselection()
+        #and selected_index[0]
+        if idx < self.folders_listbox.size() - 1:
+            self.folders_listbox.move_down(idx)
+            # # Swap in listbox
+            # self.folders_listbox.insert(idx + 2, self.folders_listbox.get(idx))
+            # self.folders_listbox.delete(idx)
+            # # Swap in data storage
             self.added_folders.insert(idx + 1, self.added_folders.pop(idx))
-            # Maintain selection
-            self.folders_listbox.selection_clear(0, tk.END)
-            self.folders_listbox.selection_set(idx + 1)
+            # # Maintain selection
+            # self.folders_listbox.selection_clear(0, tk.END)
+            # self.folders_listbox.selection_set(idx + 1)
 
     def stop_search(self):
         self.stop_search_flag.set()
@@ -781,7 +766,7 @@ class ImSearch:
             # Get files from all added folders once
             self.files_list = self.list_files(self.added_folders, include_subfolders)
             total_files = len(self.files_list)
-            self.progress.set(total_files)
+            self.progress["maximum"] = total_files
             search_type = self.search_combobox.get()
             self.stop_search_button.configure(state=tk.NORMAL)
 
@@ -937,26 +922,29 @@ class ImSearch:
                     self.root.after(0, self._update_progress,
                                     folder_idx * len(folder_group), total)
 
-    def reprocess_folders(self):
+    def process_folders(self):
         """Force reprocessing of all folders in a background thread"""
         if self.current_processing_thread and self.current_processing_thread.is_alive():
             self.processing_flag.set()
             self.current_processing_thread.join(timeout=5)
 
         # Retrieve Tkinter data in the main thread
-        folders = list(self.folders_listbox.get(0, tk.END))
+        count = self.folders_listbox.size()
+        folders=[]
+        for i in range(count):
+            folders.append(self.folders_listbox.get(i))
         include_subfolders = self.subfolders.get() == 1
 
         self.processing_flag.clear()
         self.current_processing_thread = threading.Thread(
-            target=self._reprocess_all_folders,
+            target=self._process_all_folders,
             args=(folders, include_subfolders),
             daemon=True
         )
         self.current_processing_thread.start()
         #elif inna_metoda_indeksowania()
 
-    def _reprocess_all_folders(self, folders, include_subfolders):
+    def _process_all_folders(self, folders, include_subfolders):
         """Background thread logic for reprocessing"""
         # Delete existing files first
         all_folders = set()
@@ -980,44 +968,18 @@ class ImSearch:
 
         # Show completion message in the main thread
         self.root.after(0, lambda: messagebox.showinfo(
-            "Info", "All folders reprocessed with current model"
+            "Info", "All folders processed with current model"
         ))
 
     def _update_progress_max(self, total):
         """Thread-safe progress max setup"""
-        self.progress.set(total)
+        self.progress["value"] = total
         self.status.set("Starting folder processing...")
 
     def _update_progress(self, current, total):
         """Thread-safe progress update"""
-        self.progress.set(current)
+        self.progress["value"] = current
         self.status.set(f"Processed {current}/{total} folders")
-
-    def _finalize_processing(self):
-        """Thread-safe finalization"""
-        self.status.set("Folder processing completed"
-                        if not self.processing_flag.is_set()
-                        else "Processing interrupted")
-        self.progress.set(0)
-        self.processing_flag.clear()
-
-    def start_folder_processing(self):
-        """Start/Restart folder processing with thread management"""
-        if self.current_processing_thread and self.current_processing_thread.is_alive():
-            self.processing_flag.set()
-            self.current_processing_thread.join(timeout=5)
-
-        # Retrieve Tkinter data in the main thread
-        folders = list(self.folders_listbox.get(0, tk.END))
-        include_subfolders = self.subfolders.get() == 1
-
-        self.processing_flag.clear()
-        self.current_processing_thread = threading.Thread(
-            target=self.process_all_folders,
-            args=(folders, include_subfolders),
-            daemon=True
-        )
-        self.current_processing_thread.start()
 
     def _get_folder_structure(self, folders, include_subfolders):
         """Get ordered list of folders with hierarchy"""
@@ -1030,24 +992,8 @@ class ImSearch:
                 ordered_folders.append(str(folder))
         return ordered_folders
 
-    def _update_vector_progress(self, current, total, folder):
-        """Thread-safe progress update for vector search"""
-        self.progress["value"] = current
-        self.status.set(f"Searching {folder} ({current}/{total})")
-
-    def _complete_vector_search(self, results, elapsed_time):
-        """Finalize search in main thread"""
-        self.tree.delete(*self.tree.get_children())
-        max_results = max(100, int(len(results) * 0.01))
-        for path, similarity in sorted(results, key=lambda x: -x[1])[:max_results]:
-            self.tree.insert("", tk.END, values=(path, f"{similarity:.2f}%"))
-
-        self.status.set(f"Found {len(results)} matches in {elapsed_time:.2f}s")
-        self.progress["value"] = 0
-        self.stop_search_button.configure(state=tk.DISABLED)
-
     def vector_search(self):
-        """Entry point with explicit folder order"""
+        """Entry point for vector similarity search"""
         try:
             self.tree.delete(*self.tree.get_children())
             query_vector = self.vector_extractor.extract(Path(self.target_image_path))
@@ -1056,12 +1002,12 @@ class ImSearch:
                 messagebox.showerror("Error", "Feature extraction failed")
                 return
 
-            # Get folders in listbox order
-            folders = list(self.folders_listbox.get(0, tk.END))
+            # Get search parameters
+            folders = [self.folders_listbox.get(i) for i in range(self.folders_listbox.size())]
             include_subfolders = self.subfolders.get() == 1
-
-            # Generate ordered vector file list
             vector_files = []
+
+            # Build ordered vector file list
             for folder in folders:
                 folder_path = Path(folder)
                 if include_subfolders:
@@ -1078,7 +1024,7 @@ class ImSearch:
                 messagebox.showinfo("Info", "Process folders first")
                 return
 
-            # Start thread with ordered files
+            # Configure and start search thread
             self.progress["maximum"] = len(vector_files)
             self.search_thread = threading.Thread(
                 target=self._vector_search_thread,
@@ -1092,28 +1038,32 @@ class ImSearch:
             messagebox.showerror("Error", str(e))
 
     def _vector_search_thread(self, vector_files, query_vector):
-        """Threaded vector search with ordered processing"""
+        """Background thread for vector processing with integrated progress/completion"""
         try:
-            # Validate vector dimensions first
+            # Validate vector dimensions
             if query_vector.shape[0] != 512:
-                self.root.after(0, messagebox.showerror,
-                                "Error", "Query vector dimension mismatch (expected 512)")
+                self.root.after(0, lambda: messagebox.showerror(
+                    "Error", "Query vector dimension mismatch (expected 512)"))
                 return
 
             results = []
             start_time = time.time()
-            total_files = len(vector_files)
 
             for idx, vec_file in enumerate(vector_files, 1):
                 if self.stop_search_flag.is_set():
                     break
 
-                # Update progress in main thread
-                self.root.after(0, self._update_vector_progress,
-                                idx, total_files, vec_file.parent)
+                # Update progress directly in main thread
+                self.root.after(0,
+                                lambda current_idx=idx, current_file=vec_file: [
+                                    self.progress.config(value=current_idx),
+                                    self.status.set(
+                                        f"Searching {current_file.parent} ({current_idx}/{len(vector_files)})")
+                                ]
+                                )
 
-                # Process current vector file
                 try:
+                    # Load vectors and metadata
                     vectors = np.load(vec_file, mmap_mode='r')
                     meta_file = vec_file.parent / METADATA_FILE
                     meta_df = pd.read_csv(meta_file)
@@ -1122,34 +1072,38 @@ class ImSearch:
                     similarities = np.dot(vectors, query_vector)
                     euclidean_dists = np.linalg.norm(vectors - query_vector, axis=1)
 
-                    # Apply thresholds
+                    # Apply similarity threshold
                     for i, (sim, dist) in enumerate(zip(similarities, euclidean_dists)):
                         sim_percent = sim * 100
-                        if (sim_percent >= max(int(self.sim.get()), 70) and
-                                dist <= 0.5 and
-                                sim_percent >= self._calculate_adaptive_threshold(similarities)):
+                        if sim_percent >= int(self.sim.get()):
                             results.append((meta_df.iloc[i]['path'], sim_percent))
 
                 except Exception as e:
                     print(f"Error processing {vec_file}: {str(e)}")
 
-            # Finalize in main thread
+            # Finalize results in main thread
             elapsed = time.time() - start_time
-            self.root.after(0, self._complete_vector_search, results, elapsed)
+            self.root.after(0, lambda: (
+                self.tree.delete(*self.tree.get_children()),
+                [self.tree.insert("", tk.END, values=(path, f"{similarity:.2f}%"))
+                 for path, similarity in sorted(results, key=lambda x: -x[1])],
+                self.status.set(f"Found {len(results)} matches in {elapsed:.2f}s"),
+                self.progress.__setitem__("value", 0),
+                self.stop_search_button.configure(state=tk.DISABLED)
+            ))
 
         except Exception as e:
-            self.root.after(0, messagebox.showerror,
-                            "Search Error", str(e))
+            self.root.after(0, lambda: messagebox.showerror("Search Error", str(e)))
 
-    def _calculate_adaptive_threshold(self, similarities):
-        """Calculate dynamic threshold based on similarity distribution"""
-        similarities = np.array(similarities)
-        if len(similarities) == 0:
-            return 0
-
-        # Use 90th percentile as baseline
-        threshold = np.percentile(similarities, 90) * 100
-        return max(threshold, 70)  # Minimum 70% threshold
+    # def _calculate_adaptive_threshold(self, similarities):
+    #     """Calculate dynamic threshold based on similarity distribution"""
+    #     similarities = np.array(similarities)
+    #     if len(similarities) == 0:
+    #         return 0
+    #
+    #     # Use 90th percentile as baseline
+    #     threshold = np.percentile(similarities, 90) * 100
+    #     return max(threshold, 70)  # Minimum 70% threshold
 
     def search_histogram(self, files, hist1):
         start_time = time.time()
@@ -1170,7 +1124,7 @@ class ImSearch:
                 if similarity >= int(self.sim.get()):
                     self.tree.insert("", tk.END, values=(file, f"{similarity:.2f}"))
                     files_found += 1
-            self.progress.set(count)
+            self.progress["value"] = count
             self.root.update_idletasks()
         else:
             self.status.set(f"Completed. {analyzed_files_count} files analyzed")
@@ -1179,34 +1133,15 @@ class ImSearch:
         elapsed_time = end_time - start_time
         if analyzed_files_count != 0:
             self.status.set(f"Completed in {elapsed_time:.2f} seconds, {analyzed_files_count} files analyzed, {files_found} similar images found")
-            self.progress.set(0)
+            self.progress["value"] = 0
         else:
             messagebox.showinfo("Error", f"No image files found in selected folders. Try ticking the \"Search subfolders\" option")
-            self.progress.set(0)
+            self.progress["value"] = 0
 
         self.reset_ui()
         self.stop_search_button.configure(state=tk.DISABLED)
 
         self.search_thread = None
-
-    def search_duplicates(self):
-        """Find all duplicates of the target image using parallel processing"""
-        try:
-            self.tree.delete(*self.tree.get_children())
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-        include_subfolders = self.subfolders.get() == 1
-        # Use added_folders instead of folder_path
-        files = self.list_files(self.added_folders, include_subfolders)
-        self.progress["maximum"] = len(files)
-
-        # Pre-calculate target hash once
-        target_hash = calculate_image_hash(self.target_image_path)
-
-        self.search_thread = threading.Thread(target=self._search_duplicates_thread,
-                                              args=(files, target_hash))
-        self.search_thread.start()
 
     def calculate_quick_hash(self, image_path):
         """Fast partial hash of first and middle 8KB chunks"""
@@ -1233,6 +1168,25 @@ class ImSearch:
         except Exception as e:
             print(f"Error reading {image_path}: {str(e)}")
             return None
+
+    def search_duplicates(self):
+        """Find all duplicates of the target image using parallel processing"""
+        try:
+            self.tree.delete(*self.tree.get_children())
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+        include_subfolders = self.subfolders.get() == 1
+        # Use added_folders instead of folder_path
+        files = self.list_files(self.added_folders, include_subfolders)
+        self.progress["maximum"] = len(files)
+
+        # Pre-calculate target hash once
+        target_hash = calculate_image_hash(self.target_image_path)
+
+        self.search_thread = threading.Thread(target=self._search_duplicates_thread,
+                                              args=(files, target_hash))
+        self.search_thread.start()
 
     def _search_duplicates_thread(self, files, source_hash):
         """Modified thread with quick checksum filtering"""
@@ -1282,7 +1236,7 @@ class ImSearch:
 
     def duplicate_pairs(self):
         """Find all duplicate groups in the dataset using hash grouping"""
-        if not self.folder_path:
+        if not self.added_folders:
             tk.messagebox.showinfo("Info", "Please select a folder.")
             return
 
@@ -1298,7 +1252,7 @@ class ImSearch:
         self.tree.delete(*self.tree.get_children())
 
         include_subfolders = self.subfolders.get() == 1
-        files = self.list_files(Path(self.folder_path), include_subfolders)
+        files = self.list_files(self.added_folders, include_subfolders)
         hash_groups = {}
 
         # Phase 1: Group files by hash
@@ -1320,7 +1274,7 @@ class ImSearch:
 
                     processed += 1
                     if processed % 100 == 0:
-                        self.progress.set(processed)
+                        self.progress["value"] = processed
                         self.status.set(f"Processed {processed}/{len(files)} files")
                         self.root.update_idletasks()
 
@@ -1348,7 +1302,7 @@ class ImSearch:
 
         elapsed_time = time.time() - start_time
         self.status.set(f"Found {len(hash_groups)} groups in {elapsed_time:.2f}s")
-        self.progress.set(0)
+        self.progress["value"] = 0
         self.stop_search_button.configure(state=tk.DISABLED)
 
         self.search_thread = None
@@ -1380,7 +1334,7 @@ class ImSearch:
             messagebox.showerror("Error", str(e))
 
         include_subfolders = self.subfolders.get() == 1
-        files = self.list_files(Path(self.folder_path), include_subfolders)
+        files = self.list_files(self.folder_path, include_subfolders)
         self.progress["maximum"] = len(files)
 
         # Limit thread count to reduce CPU load (adjust max_workers as needed)
@@ -1722,34 +1676,76 @@ class ImSearch:
             if pos > -1:
                 selected_file_path = selected_file_path[:pos]
 
-            target_image_full = Image.open(self.target_image_path, 'r')
-            selected_image_full = Image.open(selected_file_path, 'r')
-
-            target_width, target_height = target_image_full.size
-            selected_width, selected_height = selected_image_full.size
-
-            window_width = max(target_width, selected_width) * 2
-            window_height = max(target_height, selected_height)
+            target_image_pil = Image.open(self.target_image_path)
+            selected_image_pil = Image.open(selected_file_path)
 
             new_window = tk.Toplevel(self.root)
             new_window.title("Full Size Images")
-            new_window.geometry(f"{window_width}x{window_height}")
 
-            canvas_target = tk.Canvas(new_window, bg="white", relief=tk.SUNKEN, width=target_width,
-                                      height=target_height)
-            canvas_target.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            # Create frames
+            frame_uploaded = tk.Frame(new_window)
+            frame_selected = tk.Frame(new_window)
+            frame_uploaded.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+            frame_selected.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-            canvas_selected = tk.Canvas(new_window, bg="white", relief=tk.SUNKEN, width=selected_width,
-                                        height=selected_height)
-            canvas_selected.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+            # Create canvases
+            canvas_target = tk.Canvas(frame_uploaded, bg="white", relief=tk.SUNKEN)
+            canvas_selected = tk.Canvas(frame_selected, bg="white", relief=tk.SUNKEN)
+            canvas_target.pack(fill=tk.BOTH, expand=True)
+            canvas_selected.pack(fill=tk.BOTH, expand=True)
 
-            target_image_full = ImageTk.PhotoImage(target_image_full)
-            canvas_target.create_image(0, 0, anchor=tk.NW, image=target_image_full)
-            canvas_target.image = target_image_full
+            # Store original images
+            canvas_target.original_image = target_image_pil
+            canvas_selected.original_image = selected_image_pil
 
-            selected_image_full = ImageTk.PhotoImage(selected_image_full)
-            canvas_selected.create_image(0, 0, anchor=tk.NW, image=selected_image_full)
-            canvas_selected.image = selected_image_full
+            def on_resize(event):
+                for canvas, frame in [(canvas_target, frame_uploaded),
+                                      (canvas_selected, frame_selected)]:
+                    if not hasattr(canvas, 'original_image'):
+                        continue
+
+                    original_image = canvas.original_image
+                    available_width = frame.winfo_width()
+                    available_height = frame.winfo_height()
+
+                    # Skip if frame has no visible area
+                    if available_width <= 1 or available_height <= 1:
+                        continue
+
+                    # Calculate aspect ratio-preserving dimensions
+                    orig_width, orig_height = original_image.size
+                    ratio = min(
+                        available_width / orig_width,
+                        available_height / orig_height
+                    )
+                    new_width = int(orig_width * ratio)
+                    new_height = int(orig_height * ratio)
+
+                    # Ensure minimum dimensions of 1 pixel
+                    new_width = max(1, new_width)
+                    new_height = max(1, new_height)
+
+                    try:
+                        resized_image = original_image.resize(
+                            (new_width, new_height),
+                            Image.Resampling.LANCZOS
+                        )
+                        photo = ImageTk.PhotoImage(resized_image)
+
+                        canvas.delete("all")
+                        canvas.create_image(
+                            (available_width - new_width) // 2,
+                            (available_height - new_height) // 2,
+                            anchor=tk.NW,
+                            image=photo
+                        )
+                        canvas.image = photo
+                    except Exception as e:
+                        print(f"Resize error: {e}")
+
+            new_window.bind("<Configure>", on_resize)
+            new_window.after(100, lambda: on_resize(None))
+
 
     def open_in_explorer(self):
         selected_item = self.tree.selection()
