@@ -128,7 +128,7 @@ class ImSearch:
         self.feature_cache = {}  # {file: (kp, des)}
         self.cache_version = "1.0"
 
-        self.sift = self._initialize_sift()
+        #self.sift = self._initialize_sift()
 
         self.current_language = "English"
 
@@ -436,7 +436,7 @@ class ImSearch:
         sim_frame.columnconfigure(0, weight=0)  # Don't expand spinbox column
         sim_frame.columnconfigure(1, weight=0)  # Fixed width for percentage
 
-        self.sim = tk.Spinbox(sim_frame, from_=0, to=100, width=8, justify='center')  # Increased width
+        self.sim = tk.Spinbox(sim_frame, from_=0, to=100, width=8, justify='center', bg="gray13", fg="gray84")
         self.sim.grid(row=0, column=0, sticky="e", padx=(0, 2))  # Right-aligned with small padding
         self.sim.delete(0, "end")
         self.sim.insert(0, "50")
@@ -1114,7 +1114,7 @@ class ImSearch:
             if self.stop_search_flag.is_set():
                 self.status.set(f"Search stopped by user. {analyzed_files_count} files analyzed")
                 break
-            self.status.set(f"Analyzing {file.name} ({count}/{len(files)}) - {files_found} matches found")
+            self.status.set(f"Analyzing files ({count}/{len(files)}) - {files_found} matches found")
             self.root.update_idletasks()
             analyzed_files_count += 1
             if file != self.target_image_path:
@@ -1215,7 +1215,7 @@ class ImSearch:
 
                 # Final check: Full hash comparison
                 analyzed_files_count += 1
-                self.status.set(f"Deep analyzing {file.name} ({count}/{len(files)})")
+                self.status.set(f"Analyzing files ({count}/{len(files)})")
                 file_hash = calculate_image_hash(file)
 
                 if file_hash == source_hash and self.target_image_path != file:
@@ -1334,7 +1334,7 @@ class ImSearch:
             messagebox.showerror("Error", str(e))
 
         include_subfolders = self.subfolders.get() == 1
-        files = self.list_files(self.folder_path, include_subfolders)
+        files = self.list_files(self.added_folders, include_subfolders)
         self.progress["maximum"] = len(files)
 
         # Limit thread count to reduce CPU load (adjust max_workers as needed)
@@ -1348,7 +1348,7 @@ class ImSearch:
         processed_count = 0
         files_found = 0  # Track matching files
 
-        sift = cv2.SIFT_create(contrastThreshold=0.07, edgeThreshold=5)
+        sift = cv2.SIFT_create(contrastThreshold=0.07, edgeThreshold=10)
         query_img = cv2.imread(self.target_image_path, cv2.IMREAD_GRAYSCALE)
         kp1, des1 = sift.detectAndCompute(query_img, None)
 
@@ -1381,19 +1381,17 @@ class ImSearch:
                 processed_count += 1
                 self.progress["value"] = processed_count
 
-                # Update status every 5 files or when processing takes time
-                if processed_count % 5 == 0 or processed_count == total_files:
-                    self.status.set(
-                        f"Analyzing files ({processed_count}/{total_files}) - "
-                        f"{files_found} matches found"
-                    )
-                    self.root.update_idletasks()
+                self.status.set(
+                    f"Analyzing files ({processed_count}/{total_files}) - "
+                    f"{files_found} matches found"
+                )
+                self.root.update_idletasks()
 
                 try:
                     result = future.result()
                     if result:
-                        self.tree.insert("", tk.END, values=result)
                         files_found += 1
+                        self.tree.insert("", tk.END, values=result)
                 except Exception as e:
                     continue
 
@@ -1410,6 +1408,40 @@ class ImSearch:
         self.stop_search_flag.clear()
         self.search_thread = None
 
+    # def _process_sift_file(self, file, bf, des1, min_matches, ratio_thresh):
+    #     if self.stop_search_flag.is_set():
+    #         return None
+    #
+    #     try:
+    #         target_img = cv2.imread(str(file), cv2.IMREAD_GRAYSCALE)
+    #         if target_img is None:
+    #             return None
+    #
+    #         # Check stop flag before heavy computation
+    #         if self.stop_search_flag.is_set():
+    #             return None
+    #
+    #         sift = cv2.SIFT_create(contrastThreshold=0.01, edgeThreshold=5)
+    #         kp2, des2 = sift.detectAndCompute(target_img, None)
+    #
+    #         if des2 is None or len(des2) < min_matches:
+    #             return None
+    #
+    #         matches = bf.knnMatch(des1, des2, k=2)
+    #         good = []
+    #         for m, n in matches:
+    #             if m.distance < ratio_thresh * n.distance:
+    #                 good.append(m)
+    #             if self.stop_search_flag.is_set():
+    #                 return None
+    #
+    #         if len(good) < min_matches:
+    #             return None
+    #
+    #     except Exception as e:
+    #         print(f"Error processing {file}: {str(e)}")
+    #     return None
+
     def _process_sift_file(self, file, bf, des1, min_matches, ratio_thresh):
         if self.stop_search_flag.is_set():
             return None
@@ -1423,7 +1455,7 @@ class ImSearch:
             if self.stop_search_flag.is_set():
                 return None
 
-            sift = cv2.SIFT_create(contrastThreshold=0.01, edgeThreshold=5)
+            sift = cv2.SIFT_create(contrastThreshold=0.07, edgeThreshold=10)
             kp2, des2 = sift.detectAndCompute(target_img, None)
 
             if des2 is None or len(des2) < min_matches:
@@ -1440,62 +1472,14 @@ class ImSearch:
             if len(good) < min_matches:
                 return None
 
-            def _sift_compare_thread(self, files, max_workers):
-                start_time = time.time()
-                processed_count = 0  # Track total processed files
-
-                sift = cv2.SIFT_create(contrastThreshold=0.07, edgeThreshold=5)
-                query_img = cv2.imread(self.target_image_path, cv2.IMREAD_GRAYSCALE)
-                kp1, des1 = sift.detectAndCompute(query_img, None)
-
-                if des1 is None or len(des1) < 10:
-                    self.status.set("No features found in query image")
-                    return
-
-                bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
-                MIN_MATCHES = 5
-                RATIO_THRESH = 0.9
-
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = []
-                    for file in files:
-                        if self.stop_search_flag.is_set():
-                            break
-                        futures.append(executor.submit(
-                            self._process_sift_file,
-                            file, bf, des1, MIN_MATCHES, RATIO_THRESH
-                        ))
-
-                    # Process completed tasks and update progress
-                    for future in as_completed(futures):
-                        if self.stop_search_flag.is_set():
-                            for f in futures:
-                                f.cancel()
-                            break
-
-                        processed_count += 1
-                        self.progress["value"] = processed_count
-                        self.root.update_idletasks()
-
-                        try:
-                            result = future.result()
-                            if result:
-                                self.tree.insert("", tk.END, values=result)
-                        except Exception as e:
-                            continue
-
-                elapsed_time = time.time() - start_time
-                stop_status = "stopped" if self.stop_search_flag.is_set() else "completed"
-                self.status.set(
-                    f"SIFT compare {stop_status} in {elapsed_time:.2f}s - Processed {processed_count} files")
-                self.progress["value"] = 0
-                self.stop_search_button.configure(state=tk.DISABLED)
-                self.stop_search_flag.clear()
-                self.search_thread = None
+            # Calculate similarity score (example: ratio of good matches to total query features)
+            similarity = len(good) / len(des1)
+            if similarity*100 >= int(self.sim.get()):
+                self.tree.insert("", tk.END, values=(file, f"{similarity*100:.2f}"))
 
         except Exception as e:
             print(f"Error processing {file}: {str(e)}")
-        return None
+            return None
 
     def ssim_compare(self, *files):
         start_time = time.time()
@@ -1676,7 +1660,10 @@ class ImSearch:
             if pos > -1:
                 selected_file_path = selected_file_path[:pos]
 
-            target_image_pil = Image.open(self.target_image_path)
+            if self.search_combobox == "Duplicate Pairs" and self.target_image_path is None:
+                target_image_pil = Image.open(self.tree.item(selected_item)['values'][0])
+            else:
+                target_image_pil = Image.open(self.target_image_path)
             selected_image_pil = Image.open(selected_file_path)
 
             new_window = tk.Toplevel(self.root)
